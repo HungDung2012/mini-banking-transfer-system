@@ -1,0 +1,10 @@
+.worktrees/
+.superpowers/
+worktrees/
+target/
+**/target/
+.idea/
+.vscode/
+.env
+logs/
+*.log
