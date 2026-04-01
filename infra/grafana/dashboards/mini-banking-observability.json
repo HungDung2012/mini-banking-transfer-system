@@ -1,0 +1,56 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "# Mini Banking Observability\n\n- Prometheus metrics are provisioned as the default datasource.\n- Elasticsearch is available for Filebeat-backed logs.\n- Jaeger traces are collected through the OpenTelemetry Collector.",
+        "mode": "markdown"
+      },
+      "title": "Stack Overview",
+      "type": "text"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "mini-banking"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Mini Banking Observability",
+  "uid": "mini-banking-observability",
+  "version": 1
+}
