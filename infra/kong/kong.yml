@@ -1,0 +1,47 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: auth-service
+    url: http://auth-service:8080/auth
+    routes:
+      - name: auth-route
+        paths:
+          - /api/auth
+        strip_path: true
+  - name: transaction-service
+    url: http://transaction-service:8080
+    routes:
+      - name: transfer-route
+        paths:
+          - /api/transfers
+        strip_path: true
+
+consumers:
+  - username: alice
+    jwt_secrets:
+      - algorithm: HS256
+        key: alice
+        secret: test-secret-for-auth-service
+
+plugins:
+  - name: jwt
+    service: transaction-service
+    config:
+      key_claim_name: sub
+      claims_to_verify:
+        - exp
+      header_names:
+        - authorization
+  - name: request-transformer
+    service: transaction-service
+    config:
+      remove:
+        headers:
+          - X-User-Id
+      add:
+        headers:
+          # Auth-service tokens use `sub` for the username (e.g. `alice`) and `uid` for the numeric user id.
+          # Kong uses `sub` to locate the JWT credential, then rewrites `X-User-Id` from `uid` so downstream services
+          # receive the stable user identifier instead of the username.
+          - "X-User-Id:$(authenticated_jwt.claims.uid)"
