@@ -6,9 +6,14 @@ import com.btlbanking.transaction.client.FraudClient;
 import com.btlbanking.transaction.domain.TransferEntity;
 import com.btlbanking.transaction.domain.TransferRepository;
 import com.btlbanking.transaction.domain.TransferStatus;
+import com.btlbanking.transaction.events.TransferEvent;
+import com.btlbanking.transaction.idempotency.IdempotencyRecord;
+import com.btlbanking.transaction.idempotency.IdempotencyStore;
+import com.btlbanking.transaction.outbox.OutboxPublisher;
 import com.btlbanking.transaction.web.CreateTransferRequest;
 import com.btlbanking.transaction.web.TransferResponse;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -24,20 +29,38 @@ public class TransferApplicationService {
   private final AccountClient accountClient;
   private final CircuitBreaker fraudCircuitBreaker;
   private final CircuitBreaker accountCircuitBreaker;
+  private final IdempotencyStore idempotencyStore;
+  private final OutboxPublisher outboxPublisher;
 
   public TransferApplicationService(TransferRepository repository,
       FraudClient fraudClient,
       AccountClient accountClient,
       @Qualifier("fraudCircuitBreaker") CircuitBreaker fraudCircuitBreaker,
-      @Qualifier("accountCircuitBreaker") CircuitBreaker accountCircuitBreaker) {
+      @Qualifier("accountCircuitBreaker") CircuitBreaker accountCircuitBreaker,
+      IdempotencyStore idempotencyStore,
+      OutboxPublisher outboxPublisher) {
     this.repository = repository;
     this.fraudClient = fraudClient;
     this.accountClient = accountClient;
     this.fraudCircuitBreaker = fraudCircuitBreaker;
     this.accountCircuitBreaker = accountCircuitBreaker;
+    this.idempotencyStore = idempotencyStore;
+    this.outboxPublisher = outboxPublisher;
   }
 
   public TransferResponse create(String userId, String idempotencyKey, CreateTransferRequest request) {
+    String requestFingerprint = fingerprint(request);
+    Optional<IdempotencyRecord> existing = idempotencyStore.find(userId, idempotencyKey);
+    if (existing.isPresent()) {
+      IdempotencyRecord record = existing.get();
+      if (!record.matches(userId, idempotencyKey, requestFingerprint)) {
+        throw new IllegalArgumentException("Idempotency key reused with a different request payload");
+      }
+      TransferEntity transfer = repository.findById(record.transferId())
+          .orElseThrow(() -> new IllegalStateException("Missing transfer for idempotency record"));
+      return toResponse(transfer);
+    }
+
     TransferEntity entity = new TransferEntity();
     entity.setUserId(userId);
     entity.setIdempotencyKey(idempotencyKey);
@@ -46,6 +69,8 @@ public class TransferApplicationService {
     entity.setAmount(request.amount());
     entity.setStatus(TransferStatus.PENDING);
     entity = repository.save(entity);
+
+    idempotencyStore.save(userId, idempotencyKey, requestFingerprint, entity.getId());
 
     TransferStatus finalStatus;
     try {
@@ -84,7 +109,8 @@ public class TransferApplicationService {
     }
 
     entity.setStatus(finalStatus);
-    repository.save(entity);
+    entity = repository.save(entity);
+    outboxPublisher.record(TransferEvent.from(entity));
     return toResponse(entity);
   }
 
@@ -101,5 +127,10 @@ public class TransferApplicationService {
 
   private <T> T execute(CircuitBreaker circuitBreaker, Supplier<T> supplier) {
     return CircuitBreaker.decorateSupplier(circuitBreaker, supplier).get();
+  }
+
+  private String fingerprint(CreateTransferRequest request) {
+    return request.sourceAccount() + "|" + request.destinationAccount() + "|"
+        + request.amount().stripTrailingZeros().toPlainString();
   }
 }

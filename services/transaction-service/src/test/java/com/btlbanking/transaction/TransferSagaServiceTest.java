@@ -13,12 +13,15 @@ import com.btlbanking.transaction.client.FraudClient;
 import com.btlbanking.transaction.domain.TransferEntity;
 import com.btlbanking.transaction.domain.TransferRepository;
 import com.btlbanking.transaction.domain.TransferStatus;
+import com.btlbanking.transaction.idempotency.IdempotencyStore;
+import com.btlbanking.transaction.outbox.OutboxPublisher;
 import com.btlbanking.transaction.service.TransferApplicationService;
 import com.btlbanking.transaction.web.CreateTransferRequest;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +41,12 @@ class TransferSagaServiceTest {
   @Mock
   TransferRepository transferRepository;
 
+  @Mock
+  IdempotencyStore idempotencyStore;
+
+  @Mock
+  OutboxPublisher outboxPublisher;
+
   TransferApplicationService service;
   List<TransferStatus> savedStatuses;
 
@@ -52,13 +61,16 @@ class TransferSagaServiceTest {
       }
       return entity;
     });
+    when(idempotencyStore.find(any(), any())).thenReturn(Optional.empty());
     CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();
     service = new TransferApplicationService(
         transferRepository,
         fraudClient,
         accountClient,
         registry.circuitBreaker("fraud-client"),
-        registry.circuitBreaker("account-client"));
+        registry.circuitBreaker("account-client"),
+        idempotencyStore,
+        outboxPublisher);
   }
 
   @Test
@@ -71,6 +83,7 @@ class TransferSagaServiceTest {
     assertThat(response.status()).isEqualTo(TransferStatus.REJECTED);
     verify(accountClient, org.mockito.Mockito.never()).debit(any(), any());
     assertThat(savedStatuses).containsExactly(TransferStatus.PENDING, TransferStatus.REJECTED);
+    verify(outboxPublisher).record(any());
   }
 
   @Test
@@ -85,6 +98,7 @@ class TransferSagaServiceTest {
     assertThat(response.status()).isEqualTo(TransferStatus.FAILED);
     verify(accountClient).debit("100001", new BigDecimal("500"));
     assertThat(savedStatuses).containsExactly(TransferStatus.PENDING, TransferStatus.FAILED);
+    verify(outboxPublisher).record(any());
   }
 
   @Test
@@ -100,6 +114,7 @@ class TransferSagaServiceTest {
     assertThat(response.status()).isEqualTo(TransferStatus.COMPENSATED);
     verify(accountClient).compensate("100001", new BigDecimal("500"));
     assertThat(savedStatuses).containsExactly(TransferStatus.PENDING, TransferStatus.COMPENSATED);
+    verify(outboxPublisher).record(any());
   }
 
   @Test
@@ -113,5 +128,6 @@ class TransferSagaServiceTest {
     verify(accountClient).debit("100001", new BigDecimal("500"));
     verify(accountClient).credit("200001", new BigDecimal("500"));
     assertThat(savedStatuses).containsExactly(TransferStatus.PENDING, TransferStatus.SUCCESS);
+    verify(outboxPublisher).record(any());
   }
 }
