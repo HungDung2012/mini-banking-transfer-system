@@ -1,12 +1,58 @@
 $ErrorActionPreference = 'Stop'
 
-$login = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/auth/login `
-  -ContentType 'application/json' `
-  -Body '{"username":"alice","password":"secret123"}'
+$gatewayBaseUrl = $env:GATEWAY_BASE_URL
+if (-not $gatewayBaseUrl) { $gatewayBaseUrl = 'http://localhost:8000' }
+
+function Invoke-JsonRequest {
+  param(
+    [Parameter(Mandatory = $true)] [string] $Method,
+    [Parameter(Mandatory = $true)] [string] $Uri,
+    [hashtable] $Headers = @{},
+    [object] $Body = $null,
+    [bool] $ReturnRaw = $false
+  )
+
+  $invokeParams = @{
+    Method = $Method
+    Uri = $Uri
+    Headers = $Headers
+  }
+
+  if ($null -ne $Body) {
+    $invokeParams.ContentType = 'application/json'
+    $invokeParams.Body = ($Body | ConvertTo-Json -Depth 5 -Compress)
+  }
+
+  if ($ReturnRaw) {
+    return Invoke-WebRequest @invokeParams
+  }
+
+  return Invoke-RestMethod @invokeParams
+}
+
+$login = Invoke-JsonRequest -Method Post -Uri "$gatewayBaseUrl/api/auth/login" -Body @{
+  username = 'alice'
+  password = 'secret123'
+}
 
 $token = $login.token
+$headers = @{ Authorization = "Bearer $token"; 'Idempotency-Key' = 'smoke-duplicate-1' }
 
-Invoke-WebRequest -Method Post -Uri http://localhost:8000/api/transfers `
-  -Headers @{ Authorization = "Bearer $token"; 'Idempotency-Key' = 'smoke-1' } `
-  -ContentType 'application/json' `
-  -Body '{"sourceAccount":"100001","destinationAccount":"200001","amount":500}'
+$transferBody = @{
+  sourceAccount = '100001'
+  destinationAccount = '200001'
+  amount = 500
+}
+
+$first = Invoke-JsonRequest -Method Post -Uri "$gatewayBaseUrl/api/transfers" -Headers $headers -Body $transferBody
+$second = Invoke-JsonRequest -Method Post -Uri "$gatewayBaseUrl/api/transfers" -Headers $headers -Body $transferBody
+
+if ($first.transferId -ne $second.transferId) {
+  throw 'Idempotency failed'
+}
+
+$status = Invoke-JsonRequest -Method Get -Uri "$gatewayBaseUrl/api/transfers/$($first.transferId)" -Headers @{ Authorization = "Bearer $token" }
+
+Write-Host "Transfer ID: $($first.transferId)"
+Write-Host "Status: $($status.status)"
+Write-Host 'Smoke verification passed.'
