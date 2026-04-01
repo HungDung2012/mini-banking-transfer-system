@@ -28,4 +28,26 @@ class FraudControllerIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.decision").value("REJECTED"));
   }
+
+  @Test
+  void invalid_payload_is_rejected_with_bad_request() throws Exception {
+    mockMvc.perform(post("/fraud/check")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"destinationAccount":"200001","amount":1000}
+                """))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void small_transfer_is_approved() throws Exception {
+    mockMvc.perform(post("/fraud/check")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"sourceAccount":"100001","destinationAccount":"200001","amount":5000}
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.decision").value("APPROVED"))
+        .andExpect(jsonPath("$.reason").value("OK"));
+  }
 }
