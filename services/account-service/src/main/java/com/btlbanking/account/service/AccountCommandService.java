@@ -41,7 +41,14 @@ public class AccountCommandService {
   }
 
   public AccountResponse debit(BalanceCommand request) {
-    return adjustBalance(request.accountNumber(), request.amount().negate());
+    AccountEntity account = findByAccountNumber(request.accountNumber());
+    BigDecimal updatedBalance = account.getBalance().subtract(request.amount());
+    if (updatedBalance.signum() < 0) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Insufficient funds");
+    }
+    account.setBalance(updatedBalance);
+    account.setStatus(AccountStatus.ACTIVE);
+    return AccountResponse.from(repository.save(account));
   }
 
   public AccountResponse credit(BalanceCommand request) {

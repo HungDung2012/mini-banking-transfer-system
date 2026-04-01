@@ -10,6 +10,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "accounts")
@@ -18,6 +19,9 @@ public class AccountEntity {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
+
+  @Version
+  private Long version;
 
   @Column(unique = true, nullable = false)
   private String accountNumber;
@@ -38,6 +42,14 @@ public class AccountEntity {
 
   public void setId(UUID id) {
     this.id = id;
+  }
+
+  public Long getVersion() {
+    return version;
+  }
+
+  public void setVersion(Long version) {
+    this.version = version;
   }
 
   public String getAccountNumber() {
@@ -72,4 +84,3 @@ public class AccountEntity {
     this.status = status;
   }
 }
-
