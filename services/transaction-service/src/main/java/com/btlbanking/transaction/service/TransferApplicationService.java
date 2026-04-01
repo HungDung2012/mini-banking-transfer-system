@@ -34,7 +34,7 @@ public class TransferApplicationService {
   @Transactional(readOnly = true)
   public TransferResponse get(UUID transferId) {
     TransferEntity entity = repository.findById(transferId)
-        .orElseThrow(() -> new IllegalArgumentException("Transfer not found: " + transferId));
+        .orElseThrow(() -> new TransferNotFoundException("Transfer not found: " + transferId));
     return toResponse(entity);
   }
 

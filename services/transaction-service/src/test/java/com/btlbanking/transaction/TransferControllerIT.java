@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -37,5 +38,11 @@ class TransferControllerIT {
     mockMvc.perform(get("/transfers/{id}", transferId))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").exists());
+  }
+
+  @Test
+  void get_missing_transfer_returns_404() throws Exception {
+    mockMvc.perform(get("/transfers/{id}", UUID.randomUUID()))
+        .andExpect(status().isNotFound());
   }
 }
