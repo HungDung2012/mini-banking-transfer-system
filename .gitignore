@@ -9,3 +9,4 @@ target/
 logs/
 *.log
 frontend/.cache/
+.m2/

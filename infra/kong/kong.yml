@@ -3,14 +3,14 @@ _transform: true
 
 services:
   - name: auth-service
-    url: http://auth-service:8080/auth
+    url: http://host.docker.internal:8081/auth
     routes:
       - name: auth-route
         paths:
           - /api/auth
         strip_path: true
   - name: transaction-service
-    url: http://transaction-service:8080
+    url: http://host.docker.internal:8084/transfers
     routes:
       - name: transfer-route
         paths:
@@ -33,15 +33,3 @@ plugins:
         - exp
       header_names:
         - authorization
-  - name: request-transformer
-    service: transaction-service
-    config:
-      remove:
-        headers:
-          - X-User-Id
-      add:
-        headers:
-          # Auth-service tokens use `sub` for the username (e.g. `alice`) and `uid` for the numeric user id.
-          # Kong uses `sub` to locate the JWT credential, then rewrites `X-User-Id` from `uid` so downstream services
-          # receive the stable user identifier instead of the username.
-          - "X-User-Id:$(authenticated_jwt.claims.uid)"

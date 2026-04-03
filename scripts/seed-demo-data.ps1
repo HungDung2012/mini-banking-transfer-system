@@ -1,10 +1,18 @@
 $ErrorActionPreference = 'Stop'
 
+# This script assumes infrastructure is already up and the Spring Boot services
+# have been started separately. Defaults match the current local demo flow:
+# - auth registration through Kong on port 8000
+# - account-service directly on port 8082
+
 $authBaseUrl = $env:AUTH_BASE_URL
 if (-not $authBaseUrl) { $authBaseUrl = 'http://localhost:8000' }
 
 $accountBaseUrl = $env:ACCOUNT_BASE_URL
 if (-not $accountBaseUrl) { $accountBaseUrl = 'http://localhost:8082' }
+
+Write-Host "Seeding auth data via: $authBaseUrl"
+Write-Host "Seeding account data via: $accountBaseUrl"
 
 function Invoke-SeedRequest {
   param(

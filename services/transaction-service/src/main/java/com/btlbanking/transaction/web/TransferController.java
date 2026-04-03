@@ -22,9 +22,17 @@ public class TransferController {
 
   @PostMapping
   public TransferResponse create(@RequestHeader("Idempotency-Key") String idempotencyKey,
-      @RequestHeader("X-User-Id") String userId,
+      @RequestHeader(value = "X-User-Id", required = false) String userId,
+      @RequestHeader(value = "X-Consumer-Username", required = false) String consumerUsername,
       @RequestBody CreateTransferRequest request) {
-    return service.create(userId, idempotencyKey, request);
+    String effectiveUserId = userId;
+    if (effectiveUserId == null || effectiveUserId.isBlank()) {
+      effectiveUserId = consumerUsername;
+    }
+    if (effectiveUserId == null || effectiveUserId.isBlank()) {
+      effectiveUserId = "anonymous";
+    }
+    return service.create(effectiveUserId, idempotencyKey, request);
   }
 
   @GetMapping("/{transferId}")

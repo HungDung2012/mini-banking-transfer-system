@@ -1,0 +1,54 @@
+name: Deploy Google VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Package repository
+        run: tar -czf deploy.tgz .
+
+      - name: Copy bundle to VM
+        run: |
+          gcloud compute scp \
+            --zone "${{ vars.GCP_COMPUTE_ZONE }}" \
+            deploy.tgz \
+            "${{ vars.GCP_VM_NAME }}:~/deploy.tgz"
+
+      - name: Deploy on VM
+        run: |
+          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+            --zone "${{ vars.GCP_COMPUTE_ZONE }}" \
+            --command '
+              set -e
+              mkdir -p ~/apps/mini-banking-transfer-system
+              tar -xzf ~/deploy.tgz -C ~/apps/mini-banking-transfer-system
+              cd ~/apps/mini-banking-transfer-system
+              docker compose -f infra/docker-compose.yml --profile core up -d
+              chmod +x scripts/start-services.sh scripts/stop-services.sh
+              ./scripts/stop-services.sh || true
+              ./scripts/start-services.sh
+            '
