@@ -3,14 +3,14 @@ _transform: true
 
 services:
   - name: auth-service
-    url: http://172.18.0.1:8081/auth
+    url: http://172.30.0.1:8081/auth
     routes:
       - name: auth-route
         paths:
           - /api/auth
         strip_path: true
   - name: transaction-service
-    url: http://172.18.0.1:8081/transactions
+    url: http://172.30.0.1:8084/transfers
     routes:
       - name: transfer-route
         paths:
