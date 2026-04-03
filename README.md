@@ -49,6 +49,12 @@ mvn -q -pl services/audit-service spring-boot:run
 powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
 ```
 
+On Linux or Google Cloud VMs, use:
+
+```bash
+./scripts/seed-demo-data.sh
+```
+
 By default the seed script calls:
 - auth via Kong at `http://localhost:8000/api/auth/register`
 - account-service directly at `http://localhost:8082/accounts`
@@ -94,6 +100,7 @@ For Linux-based VM hosts, use:
 ```bash
 ./scripts/start-services.sh
 ./scripts/stop-services.sh
+./scripts/seed-demo-data.sh
 ```
 
 A starter GitHub Actions workflow is available at `.github/workflows/deploy-google-vm.yml`.

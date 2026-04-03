@@ -3,6 +3,8 @@ services:
     image: kong:3.7
     restart: unless-stopped
     profiles: ["core", "full"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
       - redis
