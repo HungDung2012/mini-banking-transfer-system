@@ -55,4 +55,6 @@ jobs:
               sudo docker-compose -f infra/docker-compose.yml --profile core up -d
               ./scripts/stop-services.sh || true
               ./scripts/start-services.sh
+              sleep 30
+              ./scripts/seed-demo-data.sh || true
             '

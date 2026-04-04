@@ -1,10 +1,20 @@
 services:
+  frontend:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    profiles: ["core", "full"]
+    depends_on:
+      - kong
+    ports:
+      - "80:80"
+    volumes:
+      - ../frontend:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
   kong:
     image: kong:3.7
     restart: unless-stopped
     profiles: ["core", "full"]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
       - redis

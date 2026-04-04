@@ -76,6 +76,9 @@ Open `frontend/index.html` in a browser after the services are running, then log
 - username: `alice`
 - password: `secret123`
 
+When deployed on the VM, open the VM public IP on port `80` to access the frontend.
+API endpoints such as `/api/auth/login` are backend routes and are not meant to be opened directly in a browser tab.
+
 ## Demo Flow
 
 1. Start the lighter dev stack with `docker compose -f infra/docker-compose.yml --profile core up -d`.
