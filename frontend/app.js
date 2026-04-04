@@ -141,6 +141,9 @@ async function handleTransferSubmit(event) {
     const response = await requestJson('/api/transfers', {
       method: 'POST',
       body: payload,
+      headers: {
+        'Idempotency-Key': crypto.randomUUID(),
+      },
     });
 
     if (!response.transferId) {
@@ -232,11 +235,12 @@ function handleLogout() {
   });
 }
 
-async function requestJson(path, { method, body, auth = true }) {
+async function requestJson(path, { method, body, auth = true, headers: extraHeaders = {} }) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth && state.token) {
     headers.Authorization = `Bearer ${state.token}`;
   }
+  Object.assign(headers, extraHeaders);
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,

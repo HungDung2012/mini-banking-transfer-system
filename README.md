@@ -60,6 +60,7 @@ By default the seed script calls:
 - account-service directly at `http://localhost:8082/accounts`
 
 If your local ports are different, override them with `AUTH_BASE_URL` and `ACCOUNT_BASE_URL`.
+The main services now default to PostgreSQL on `localhost:5432`, so auth/account/transaction data survives service restarts and VM redeploys as long as the Postgres volume is preserved.
 
 ### 4. Run the smoke test
 
