@@ -45,10 +45,11 @@ jobs:
             --command '
               set -e
               mkdir -p ~/apps/mini-banking-transfer-system
+              rm -rf ~/apps/mini-banking-transfer-system/*
               tar -xzf ~/deploy.tgz -C ~/apps/mini-banking-transfer-system
               cd ~/apps/mini-banking-transfer-system
-              docker compose -f infra/docker-compose.yml --profile core up -d
-              chmod +x scripts/start-services.sh scripts/stop-services.sh
+              chmod +x scripts/start-services.sh scripts/stop-services.sh scripts/seed-demo-data.sh
+              docker-compose -f infra/docker-compose.yml --profile core up -d
               ./scripts/stop-services.sh || true
               ./scripts/start-services.sh
             '
