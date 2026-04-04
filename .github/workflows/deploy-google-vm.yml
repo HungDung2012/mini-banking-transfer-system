@@ -31,7 +31,7 @@ jobs:
           version: ">= 416.0.0"
 
       - name: Package repository
-        run: tar --exclude=deploy.tgz -czf deploy.tgz .
+        run: git archive --format=tar.gz --output=deploy.tgz HEAD
 
       - name: Copy bundle to VM
         run: |
