@@ -51,6 +51,7 @@ jobs:
               tar -xzf ~/deploy.tgz -C ~/apps/mini-banking-transfer-system
               cd ~/apps/mini-banking-transfer-system
               chmod +x scripts/start-services.sh scripts/stop-services.sh scripts/seed-demo-data.sh
+              sudo docker-compose -f infra/docker-compose.yml --profile core down --remove-orphans || true
               sudo docker-compose -f infra/docker-compose.yml --profile core up -d
               ./scripts/stop-services.sh || true
               ./scripts/start-services.sh
