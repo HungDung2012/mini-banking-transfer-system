@@ -104,3 +104,91 @@ For Linux-based VM hosts, use:
 ```
 
 A starter GitHub Actions workflow is available at `.github/workflows/deploy-google-vm.yml`.
+
+## VM Deploy
+
+This project is deployed to a Google Cloud `e2-standard-4` VM.
+
+- VM name: `mini-banking-vm`
+- Zone: `us-central1-a`
+- CI/CD target profile: `core`
+- Demo-only profile: `full`
+
+Required software on the VM:
+
+- Docker Engine
+- `docker-compose`
+- Git
+- Maven
+- Java 21
+
+Manual deploy flow on the VM:
+
+```bash
+git clone https://github.com/HungDung2012/mini-banking-transfer-system.git
+cd mini-banking-transfer-system
+chmod +x scripts/*.sh
+sudo docker-compose -f infra/docker-compose.yml --profile core up -d
+./scripts/start-services.sh
+./scripts/seed-demo-data.sh
+```
+
+GitHub Actions repository configuration:
+
+- Secrets:
+  - `GCP_WORKLOAD_IDENTITY_PROVIDER`
+  - `GCP_SERVICE_ACCOUNT`
+- Variables:
+  - `GCP_PROJECT_ID`
+  - `GCP_COMPUTE_ZONE`
+  - `GCP_VM_NAME`
+
+Workflow behavior:
+
+1. Authenticate to Google Cloud with Workload Identity Federation.
+2. Package the current commit with `git archive`.
+3. Copy the bundle to the VM.
+4. Reset the `core` Compose stack on the VM.
+5. Restart backend services on the VM.
+
+## Demo Checklist
+
+Before the demo:
+
+1. Confirm the latest code is pushed to `main`.
+2. Confirm the deploy workflow has succeeded.
+3. Confirm the VM is running.
+4. Confirm the `core` stack is up.
+5. Confirm backend services are running.
+
+Demo credentials:
+
+- Username: `alice`
+- Password: `secret123`
+
+Demo commands on Windows:
+
+```powershell
+docker compose -f infra/docker-compose.yml --profile core up -d
+powershell -ExecutionPolicy Bypass -File scripts/start-services.ps1
+powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
+powershell -ExecutionPolicy Bypass -File scripts/smoke-auth-transfer.ps1
+```
+
+Demo commands on Linux / VM:
+
+```bash
+sudo docker-compose -f infra/docker-compose.yml --profile core up -d
+./scripts/start-services.sh
+./scripts/seed-demo-data.sh
+curl http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"secret123"}'
+```
+
+If something fails, check:
+
+1. `docker logs infra_kong_1`
+2. `logs/auth-service.log`
+3. `logs/account-service.log`
+4. `logs/transaction-service.log`
