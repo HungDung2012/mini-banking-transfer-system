@@ -169,6 +169,8 @@ Demo credentials:
 
 - Username: `alice`
 - Password: `secret123`
+- Username: `bob`
+- Password: `secret123`
 
 Demo commands on Windows:
 
