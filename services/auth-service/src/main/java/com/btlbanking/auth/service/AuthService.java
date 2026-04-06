@@ -51,6 +51,7 @@ public class AuthService {
     if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
       throw new BadCredentialsException("Invalid credentials");
     }
+    kongProvisioningService.ensureConsumer(user.getUsername());
     return new AuthResponse(jwtService.generateToken(user.getUsername(), user.getId()));
   }
 }

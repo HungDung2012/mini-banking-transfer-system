@@ -16,6 +16,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
@@ -55,6 +56,23 @@ class AuthControllerIT {
                 """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.token").isNotEmpty());
+
+    verify(kongProvisioningService, atLeastOnce()).ensureConsumer("alice");
+  }
+
+  @Test
+  void login_reprovisions_kong_consumer_for_existing_user() throws Exception {
+    register("alice", "secret123");
+
+    mockMvc.perform(post("/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"username":"alice","password":"secret123"}
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.token").isNotEmpty());
+
+    verify(kongProvisioningService, atLeastOnce()).ensureConsumer("alice");
   }
 
   @Test
