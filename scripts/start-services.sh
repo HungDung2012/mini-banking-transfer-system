@@ -22,8 +22,10 @@ for entry in "${services[@]}"; do
   log_file="$LOG_DIR/$name.log"
   pid_file="$PID_DIR/$name.pid"
 
-  if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-    echo "$name is already running with pid $(cat "$pid_file")"
+  existing_pid="$(pgrep -f "$module" | head -n 1 || true)"
+  if [[ -n "$existing_pid" ]]; then
+    echo "$name is already running with pid $existing_pid"
+    echo "$existing_pid" >"$pid_file"
     continue
   fi
 
