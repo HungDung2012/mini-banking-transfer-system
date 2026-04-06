@@ -20,6 +20,11 @@ if [[ ! -d "$PID_DIR" ]]; then
   mkdir -p "$PID_DIR"
 fi
 
+find_service_pids() {
+  local module="$1"
+  pgrep -f -- "-Dmaven.multiModuleProjectDirectory=$ROOT_DIR .* -pl $module spring-boot:run" || true
+}
+
 for pid_file in "$PID_DIR"/*.pid; do
   [[ -e "$pid_file" ]] || continue
   name="$(basename "$pid_file" .pid)"
@@ -38,7 +43,7 @@ done
 for entry in "${services[@]}"; do
   name="${entry%%:*}"
   module="${entry##*:}"
-  matching_pids="$(pgrep -f "$module" || true)"
+  matching_pids="$(find_service_pids "$module")"
 
   if [[ -z "$matching_pids" ]]; then
     continue
@@ -55,7 +60,7 @@ sleep 2
 
 for entry in "${services[@]}"; do
   module="${entry##*:}"
-  lingering_pids="$(pgrep -f "$module" || true)"
+  lingering_pids="$(find_service_pids "$module")"
   if [[ -n "$lingering_pids" ]]; then
     while IFS= read -r pid; do
       [[ -n "$pid" ]] || continue
