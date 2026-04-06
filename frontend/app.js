@@ -58,6 +58,25 @@ function saveAccountNumber(username, accountNumber) {
     localStorage.setItem(ACCOUNT_MAP_KEY, JSON.stringify(savedAccounts));
 }
 
+async function resolveAccountNumberForUser(username) {
+    const localAccountNumber = resolveAccountNumber(username);
+    if (localAccountNumber) {
+        return localAccountNumber;
+    }
+
+    try {
+        const account = await apiCall(`/api/accounts/by-owner/${encodeURIComponent(username)}`, 'GET', null, false);
+        if (account && account.accountNumber) {
+            saveAccountNumber(username, account.accountNumber);
+            return account.accountNumber;
+        }
+    } catch (error) {
+        console.warn('Unable to resolve account number for user:', username, error.message);
+    }
+
+    return null;
+}
+
 function persistSession() {
     if (state.token) {
         sessionStorage.setItem(TOKEN_KEY, state.token);
@@ -187,7 +206,7 @@ window.handleLogin = async function(e) {
         if (res.token) {
             state.token = res.token;
             state.username = u;
-            state.accountNumber = resolveAccountNumber(u);
+            state.accountNumber = await resolveAccountNumberForUser(u);
             state.balance = 0;
             persistSession();
             initApp();
@@ -215,6 +234,11 @@ window.handleRegister = async function(e) {
     const a = document.getElementById('reg-account').value;
     const p = document.getElementById('reg-password').value;
 
+    if (!u || !a || !p) {
+        showError('register-error', 'Please enter username, account number, and password.');
+        return;
+    }
+
     setButtonLoading('btn-register', true, 'Create Account');
     try {
         await apiCall('/api/auth/register', 'POST', { username: u, password: p });
@@ -237,7 +261,17 @@ window.handleRegister = async function(e) {
         lucide.createIcons();
 
     } catch (err) {
-        showError('register-error', err.message);
+        if (err.message === 'Username already exists. Please choose another username.') {
+            const existingAccountNumber = await resolveAccountNumberForUser(u);
+            if (existingAccountNumber) {
+                saveAccountNumber(u, existingAccountNumber);
+                showError('register-error', 'Username already exists. Try signing in with that account.');
+            } else {
+                showError('register-error', 'Username already exists, but no linked account was found yet. Please sign in or choose another username.');
+            }
+        } else {
+            showError('register-error', err.message);
+        }
     } finally {
         setButtonLoading('btn-register', false, 'Create Account');
     }

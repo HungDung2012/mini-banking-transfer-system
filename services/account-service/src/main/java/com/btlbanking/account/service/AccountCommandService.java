@@ -40,6 +40,12 @@ public class AccountCommandService {
     return AccountResponse.from(findByAccountNumber(accountNumber));
   }
 
+  @Transactional(readOnly = true)
+  public AccountResponse getByOwnerName(String ownerName) {
+    return AccountResponse.from(repository.findFirstByOwnerNameIgnoreCase(ownerName)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found")));
+  }
+
   public AccountResponse debit(BalanceCommand request) {
     AccountEntity account = findByAccountNumber(request.accountNumber());
     BigDecimal updatedBalance = account.getBalance().subtract(request.amount());

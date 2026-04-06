@@ -96,6 +96,22 @@ class AccountControllerIT {
   }
 
   @Test
+  void get_by_owner_returns_the_requested_account() throws Exception {
+    mockMvc.perform(post("/accounts")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"accountNumber":"300001","ownerName":"charlie","balance":750}
+                """))
+        .andExpect(status().isCreated());
+
+    mockMvc.perform(get("/accounts/by-owner/charlie"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.accountNumber").value("300001"))
+        .andExpect(jsonPath("$.ownerName").value("charlie"))
+        .andExpect(jsonPath("$.balance").value(750));
+  }
+
+  @Test
   void duplicate_account_creation_returns_conflict_even_when_requests_race() throws Exception {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     CountDownLatch startGate = new CountDownLatch(1);

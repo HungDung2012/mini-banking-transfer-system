@@ -31,6 +31,11 @@ public class AccountController {
     return service.get(accountNumber);
   }
 
+  @GetMapping("/by-owner/{ownerName}")
+  public AccountResponse getByOwnerName(@PathVariable("ownerName") String ownerName) {
+    return service.getByOwnerName(ownerName);
+  }
+
   @PostMapping("/debit")
   public AccountResponse debit(@Valid @RequestBody BalanceCommand request) {
     return service.debit(request);
