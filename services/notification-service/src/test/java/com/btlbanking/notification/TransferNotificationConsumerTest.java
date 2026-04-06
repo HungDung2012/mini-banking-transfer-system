@@ -60,12 +60,12 @@ class TransferNotificationConsumerTest {
     consumer.consume(event);
     consumer.consume(event);
 
-    assertThat(notificationRepository.count()).isEqualTo(1);
+    assertThat(notificationRepository.count()).isEqualTo(2);
     assertThat(processedEventRepository.count()).isEqualTo(1);
   }
 
   @Test
-  void get_notifications_returns_only_destination_account_notifications() throws Exception {
+  void get_notifications_returns_incoming_and_outgoing_notifications_for_the_account() throws Exception {
     consumer.consume(new TransferEvent(
         UUID.randomUUID(),
         UUID.randomUUID(),
@@ -90,10 +90,16 @@ class TransferNotificationConsumerTest {
         "idem-3",
         Instant.now()));
 
-    mockMvc.perform(get("/notifications/recipient/200001"))
+    mockMvc.perform(get("/notifications/account/200001"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].recipientAccount").value("200001"))
         .andExpect(jsonPath("$[0].title").value("Incoming transfer"))
         .andExpect(jsonPath("$[0].body").value("Ban vua nhan 50 VND tu tai khoan 100001"));
+
+    mockMvc.perform(get("/notifications/account/100001"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].recipientAccount").value("100001"))
+        .andExpect(jsonPath("$[0].title").value("Outgoing transfer"))
+        .andExpect(jsonPath("$[0].body").value("Ban vua chuyen 50 VND den tai khoan 200001"));
   }
 }

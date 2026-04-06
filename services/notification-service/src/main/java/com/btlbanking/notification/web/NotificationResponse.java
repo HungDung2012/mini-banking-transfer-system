@@ -20,7 +20,7 @@ public record NotificationResponse(
         entity.getTransferId(),
         entity.getRecipientAccount(),
         entity.getSourceAccount(),
-        "Incoming transfer",
+        entity.getTitle(),
         entity.getMessage(),
         entity.getStatus(),
         entity.getCreatedAt());

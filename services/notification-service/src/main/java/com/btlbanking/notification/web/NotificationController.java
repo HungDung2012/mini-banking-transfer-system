@@ -17,9 +17,15 @@ public class NotificationController {
     this.notificationQueryService = notificationQueryService;
   }
 
+  @GetMapping("/account/{accountNumber}")
+  public List<NotificationResponse> listByAccount(
+      @PathVariable("accountNumber") String accountNumber) {
+    return notificationQueryService.listForAccount(accountNumber);
+  }
+
   @GetMapping("/recipient/{accountNumber}")
   public List<NotificationResponse> listByRecipient(
       @PathVariable("accountNumber") String accountNumber) {
-    return notificationQueryService.listForRecipient(accountNumber);
+    return notificationQueryService.listForAccount(accountNumber);
   }
 }

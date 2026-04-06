@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @Entity
@@ -31,6 +32,9 @@ public class NotificationEntity {
   private String status;
 
   @Column(nullable = false)
+  private String title;
+
+  @Column(nullable = false)
   private String message;
 
   @Column(name = "recipient_account", nullable = false)
@@ -42,18 +46,38 @@ public class NotificationEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
-  public static NotificationEntity from(TransferEvent event) {
+  public static NotificationEntity incoming(TransferEvent event) {
     NotificationEntity entity = new NotificationEntity();
-    entity.setEventId(event.eventId());
+    entity.setEventId(scopedEventId(event.eventId(), "incoming"));
     entity.setTransferId(event.transferId());
     entity.setEventType(event.eventType());
     entity.setStatus(event.status().name());
     entity.setRecipientAccount(event.destinationAccount());
     entity.setSourceAccount(event.sourceAccount());
+    entity.setTitle("Incoming transfer");
     entity.setMessage("Ban vua nhan " + event.amount().stripTrailingZeros().toPlainString()
         + " VND tu tai khoan " + event.sourceAccount());
     entity.setCreatedAt(Instant.now());
     return entity;
+  }
+
+  public static NotificationEntity outgoing(TransferEvent event) {
+    NotificationEntity entity = new NotificationEntity();
+    entity.setEventId(scopedEventId(event.eventId(), "outgoing"));
+    entity.setTransferId(event.transferId());
+    entity.setEventType(event.eventType());
+    entity.setStatus(event.status().name());
+    entity.setRecipientAccount(event.sourceAccount());
+    entity.setSourceAccount(event.destinationAccount());
+    entity.setTitle("Outgoing transfer");
+    entity.setMessage("Ban vua chuyen " + event.amount().stripTrailingZeros().toPlainString()
+        + " VND den tai khoan " + event.destinationAccount());
+    entity.setCreatedAt(Instant.now());
+    return entity;
+  }
+
+  private static UUID scopedEventId(UUID eventId, String scope) {
+    return UUID.nameUUIDFromBytes((eventId + ":" + scope).getBytes(StandardCharsets.UTF_8));
   }
 
   public UUID getId() {
@@ -102,6 +126,14 @@ public class NotificationEntity {
 
   public void setMessage(String message) {
     this.message = message;
+  }
+
+  public String getTitle() {
+    return title;
+  }
+
+  public void setTitle(String title) {
+    this.title = title;
   }
 
   public String getRecipientAccount() {

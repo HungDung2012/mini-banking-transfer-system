@@ -456,7 +456,7 @@ async function fetchNotifications() {
         }
 
         const notifications = await apiCall(
-            `/api/notifications/recipient/${encodeURIComponent(state.accountNumber)}`,
+            `/api/notifications/account/${encodeURIComponent(state.accountNumber)}`,
             'GET',
             null,
             false

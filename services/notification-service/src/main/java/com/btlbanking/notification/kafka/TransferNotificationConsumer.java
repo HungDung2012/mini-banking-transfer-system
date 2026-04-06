@@ -32,7 +32,8 @@ public class TransferNotificationConsumer {
       return;
     }
 
-    notificationRepository.save(NotificationEntity.from(event));
+    notificationRepository.save(NotificationEntity.incoming(event));
+    notificationRepository.save(NotificationEntity.outgoing(event));
     processedEventRepository.save(new ProcessedEventEntity(event.eventId(), event.transferId()));
   }
 }

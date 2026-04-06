@@ -16,7 +16,7 @@ public class NotificationQueryService {
     this.notificationRepository = notificationRepository;
   }
 
-  public List<NotificationResponse> listForRecipient(String accountNumber) {
+  public List<NotificationResponse> listForAccount(String accountNumber) {
     return notificationRepository.findTop20ByRecipientAccountOrderByCreatedAtDesc(accountNumber)
         .stream()
         .map(NotificationResponse::from)
