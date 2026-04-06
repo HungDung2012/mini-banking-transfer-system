@@ -1,5 +1,9 @@
 // CONFIG
 const API_BASE = window.__API_BASE__ || '';
+const TOKEN_KEY = 'mini-banking.token';
+const USERNAME_KEY = 'mini-banking.username';
+const ACCOUNT_KEY = 'mini-banking.accountNumber';
+const ACCOUNT_MAP_KEY = 'mini-banking.accountMap';
 const DEMO_ACCOUNT_MAP = {
     alice: '100001',
     bob: '200001'
@@ -7,9 +11,9 @@ const DEMO_ACCOUNT_MAP = {
 
 // STATE variables - stored purely in memory
 const state = {
-    token: null,
-    username: null,
-    accountNumber: null,
+    token: sessionStorage.getItem(TOKEN_KEY),
+    username: sessionStorage.getItem(USERNAME_KEY),
+    accountNumber: sessionStorage.getItem(ACCOUNT_KEY),
     balance: 0,
     pollInterval: null
 };
@@ -17,6 +21,9 @@ const state = {
 // INITIALIZE ICONS
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
+    if (state.token && state.username) {
+        initApp();
+    }
 });
 
 // ---------------- UTILS ----------------
@@ -37,7 +44,38 @@ function getRawNumber(str) {
 }
 
 function resolveAccountNumber(username) {
-    return DEMO_ACCOUNT_MAP[username] || null;
+    const savedAccounts = JSON.parse(localStorage.getItem(ACCOUNT_MAP_KEY) || '{}');
+    return savedAccounts[username] || DEMO_ACCOUNT_MAP[username] || null;
+}
+
+function saveAccountNumber(username, accountNumber) {
+    if (!username || !accountNumber) {
+        return;
+    }
+
+    const savedAccounts = JSON.parse(localStorage.getItem(ACCOUNT_MAP_KEY) || '{}');
+    savedAccounts[username] = accountNumber;
+    localStorage.setItem(ACCOUNT_MAP_KEY, JSON.stringify(savedAccounts));
+}
+
+function persistSession() {
+    if (state.token) {
+        sessionStorage.setItem(TOKEN_KEY, state.token);
+    } else {
+        sessionStorage.removeItem(TOKEN_KEY);
+    }
+
+    if (state.username) {
+        sessionStorage.setItem(USERNAME_KEY, state.username);
+    } else {
+        sessionStorage.removeItem(USERNAME_KEY);
+    }
+
+    if (state.accountNumber) {
+        sessionStorage.setItem(ACCOUNT_KEY, state.accountNumber);
+    } else {
+        sessionStorage.removeItem(ACCOUNT_KEY);
+    }
 }
 
 // Toggle Dark Mode
@@ -150,6 +188,7 @@ window.handleLogin = async function(e) {
             state.username = u;
             state.accountNumber = resolveAccountNumber(u);
             state.balance = 0;
+            persistSession();
             initApp();
         } else {
             showError('login-error', 'Login failed: Missing token');
@@ -159,6 +198,7 @@ window.handleLogin = async function(e) {
         state.username = null;
         state.accountNumber = null;
         state.balance = 0;
+        persistSession();
         document.getElementById('app-view').style.display = 'none';
         document.getElementById('auth-view').style.display = 'flex';
         showError('login-error', err.message);
@@ -182,6 +222,7 @@ window.handleRegister = async function(e) {
             ownerName: u,
             balance: 0
         });
+        saveAccountNumber(u, a);
         // Auto login after register
         switchAuthTab('login');
         document.getElementById('login-username').value = u;
@@ -223,6 +264,7 @@ window.logout = function() {
     state.username = null;
     state.accountNumber = null;
     state.balance = 0;
+    persistSession();
     
     if(state.pollInterval) {
         clearInterval(state.pollInterval);
