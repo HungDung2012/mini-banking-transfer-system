@@ -15,12 +15,16 @@ public record NotificationResponse(
     Instant createdAt
 ) {
   public static NotificationResponse from(NotificationEntity entity) {
+    String title = entity.getMessage() != null && entity.getMessage().startsWith("Ban vua chuyen")
+        ? "Outgoing transfer"
+        : "Incoming transfer";
+
     return new NotificationResponse(
         entity.getId(),
         entity.getTransferId(),
         entity.getRecipientAccount(),
         entity.getSourceAccount(),
-        entity.getTitle(),
+        title,
         entity.getMessage(),
         entity.getStatus(),
         entity.getCreatedAt());

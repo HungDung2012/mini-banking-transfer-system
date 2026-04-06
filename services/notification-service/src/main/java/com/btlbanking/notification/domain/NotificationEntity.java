@@ -32,9 +32,6 @@ public class NotificationEntity {
   private String status;
 
   @Column(nullable = false)
-  private String title;
-
-  @Column(nullable = false)
   private String message;
 
   @Column(name = "recipient_account", nullable = false)
@@ -54,7 +51,6 @@ public class NotificationEntity {
     entity.setStatus(event.status().name());
     entity.setRecipientAccount(event.destinationAccount());
     entity.setSourceAccount(event.sourceAccount());
-    entity.setTitle("Incoming transfer");
     entity.setMessage("Ban vua nhan " + event.amount().stripTrailingZeros().toPlainString()
         + " VND tu tai khoan " + event.sourceAccount());
     entity.setCreatedAt(Instant.now());
@@ -69,7 +65,6 @@ public class NotificationEntity {
     entity.setStatus(event.status().name());
     entity.setRecipientAccount(event.sourceAccount());
     entity.setSourceAccount(event.destinationAccount());
-    entity.setTitle("Outgoing transfer");
     entity.setMessage("Ban vua chuyen " + event.amount().stripTrailingZeros().toPlainString()
         + " VND den tai khoan " + event.destinationAccount());
     entity.setCreatedAt(Instant.now());
@@ -126,14 +121,6 @@ public class NotificationEntity {
 
   public void setMessage(String message) {
     this.message = message;
-  }
-
-  public String getTitle() {
-    return title;
-  }
-
-  public void setTitle(String title) {
-    this.title = title;
   }
 
   public String getRecipientAccount() {
