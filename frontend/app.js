@@ -142,7 +142,6 @@ window.handleLogin = async function(e) {
     clearErrors();
     const u = document.getElementById('login-username').value;
     const p = document.getElementById('login-password').value;
-         initApp();
     setButtonLoading('btn-login', true, 'Sign In');
     try {
         const res = await apiCall('/api/auth/login', 'POST', { username: u, password: p });
@@ -156,6 +155,12 @@ window.handleLogin = async function(e) {
             showError('login-error', 'Login failed: Missing token');
         }
     } catch (err) {
+        state.token = null;
+        state.username = null;
+        state.accountNumber = null;
+        state.balance = 0;
+        document.getElementById('app-view').style.display = 'none';
+        document.getElementById('auth-view').style.display = 'flex';
         showError('login-error', err.message);
     } finally {
         setButtonLoading('btn-login', false, 'Sign In');
