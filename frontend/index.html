@@ -1,123 +1,218 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mini Banking Transfer</title>
-  <meta name="description" content="Login, submit a transfer, and inspect transfer status through Kong routes.">
-  <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Banking Transfer System</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Icons & Confetti -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="ambient ambient-one" aria-hidden="true"></div>
-  <div class="ambient ambient-two" aria-hidden="true"></div>
 
-  <div class="page-shell">
-    <header class="hero card">
-      <div class="hero-copy">
-        <p class="eyebrow">Service-Oriented Software Development</p>
-        <h1>Mini Banking Transfer</h1>
-        <p class="lead">
-          Sign in through Kong, submit a transfer, and look up the current transfer status without leaving the page.
-        </p>
-        <div class="chip-row" aria-label="Feature highlights">
-          <span class="chip">JWT login</span>
-          <span class="chip">Saga transfer</span>
-          <span class="chip">Status lookup</span>
+    <!-- ================= AUTH VIEW ================= -->
+    <div id="auth-view">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <i data-lucide="landmark"></i>
+                </div>
+                <h2>Mini Banking</h2>
+                <p>Manage your finances securely</p>
+            </div>
+
+            <div class="auth-tabs">
+                <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Login</div>
+                <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</div>
+            </div>
+
+            <div class="auth-form-container">
+                <!-- Login Form -->
+                <form id="login-form" onsubmit="handleLogin(event)">
+                    <div id="login-error" class="error-message hidden" style="margin-bottom: 1rem; justify-content: center; text-align: center;"></div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <div class="input-wrapper">
+                            <i data-lucide="user" class="input-icon"></i>
+                            <input type="text" id="login-username" class="form-input" placeholder="alice" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <div class="input-wrapper">
+                            <i data-lucide="lock" class="input-icon"></i>
+                            <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btn-login">
+                        <span>Sign In</span>
+                    </button>
+                    <div style="text-align: center; margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">
+                        Demo accounts: alice, bob
+                    </div>
+                </form>
+
+                <!-- Register Form -->
+                <form id="register-form" class="hidden" onsubmit="handleRegister(event)">
+                    <div id="register-error" class="error-message hidden" style="margin-bottom: 1rem; justify-content: center; text-align: center;"></div>
+
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <div class="input-wrapper">
+                            <i data-lucide="user" class="input-icon"></i>
+                            <input type="text" id="reg-username" class="form-input" placeholder="charlie" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Account Number</label>
+                        <div class="input-wrapper">
+                            <i data-lucide="hash" class="input-icon"></i>
+                            <input type="text" id="reg-account" class="form-input" placeholder="6-digit number" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <div class="input-wrapper">
+                            <i data-lucide="lock" class="input-icon"></i>
+                            <input type="password" id="reg-password" class="form-input" placeholder="••••••••" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btn-register">
+                        <span>Create Account</span>
+                    </button>
+                </form>
+            </div>
         </div>
-      </div>
+    </div>
 
-      <div class="session-panel" aria-live="polite">
-        <p class="session-label">Session</p>
-        <p id="session-state" class="session-state">Signed out</p>
-        <p class="session-note">
-          Requests target Kong routes like <code>/api/auth/login</code> and <code>/api/transfers</code>.
-        </p>
-      </div>
-    </header>
 
-    <main class="dashboard">
-      <section class="card card--login">
-        <div class="card-head">
-          <p class="eyebrow">Step 1</p>
-          <h2>Login</h2>
-          <p>Use the JWT issued by the auth service.</p>
+    <!-- ================= APP VIEW ================= -->
+    <div id="app-view">
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="topbar-logo">
+                    <i data-lucide="landmark" style="width: 24px; height: 24px;"></i>
+                </div>
+                <span class="topbar-title">Mini Banking</span>
+            </div>
+            <div class="topbar-right">
+                <div class="user-badge">
+                    <i data-lucide="user" style="width: 16px; height: 16px;"></i>
+                    <span id="display-username">User</span>
+                </div>
+                <button class="icon-btn" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                    <i data-lucide="moon" id="dark-mode-icon"></i>
+                </button>
+                <button class="icon-btn" onclick="logout()" title="Logout">
+                    <i data-lucide="log-out"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="app-container">
+            <!-- Left Column: Operations -->
+            <div class="col-left">
+                <div class="card">
+                    <div class="card-title">
+                        <i data-lucide="send"></i> 
+                        Transfer Funds
+                    </div>
+
+                    <form onsubmit="handleTransfer(event)">
+                        <div id="transfer-error" class="error-message hidden" style="margin-bottom: 1rem; padding: 0.75rem; border: 1px solid var(--danger); border-radius: 6px;"></div>
+
+                        <div class="form-group">
+                            <label class="form-label">Recipient Account</label>
+                            <input type="text" id="transfer-dest" class="form-input" placeholder="e.g. 200001" required oninput="updateSummary()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Amount</label>
+                            <div class="currency-input-wrapper">
+                                <input type="text" id="transfer-amount" class="form-input" placeholder="0" required oninput="formatAmountInput(this); updateSummary()">
+                                <span class="currency-symbol">₫</span>
+                            </div>
+                            <div class="quick-amounts">
+                                <button type="button" class="quick-amount-btn" onclick="setQuickAmount(50000)">50K</button>
+                                <button type="button" class="quick-amount-btn" onclick="setQuickAmount(100000)">100K</button>
+                                <button type="button" class="quick-amount-btn" onclick="setQuickAmount(200000)">200K</button>
+                                <button type="button" class="quick-amount-btn" onclick="setQuickAmount(500000)">500K</button>
+                                <button type="button" class="quick-amount-btn" onclick="setQuickAmount(1000000)">1M</button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="btn-transfer" style="margin-top: 1rem;" disabled>
+                            <span>Confirm Transfer</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right Column: Balance & Notifications -->
+            <div class="col-right">
+                <div class="card balance-card">
+                    <div class="balance-label">
+                        <span>Current Balance</span>
+                        <button class="refresh-btn" onclick="fetchBalance()" title="Refresh">
+                            <i data-lucide="refresh-cw" id="refresh-icon" style="width: 16px; height: 16px;"></i>
+                        </button>
+                    </div>
+                    <div class="balance-amount" id="display-balance">0 ₫</div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div>
+                            <div style="font-size: 0.75rem; opacity: 0.8; margin-bottom: 0.25rem;">ACCOUNT NO.</div>
+                            <div class="account-number">
+                                <i data-lucide="credit-card" style="width: 14px; height: 14px;"></i>
+                                <span id="display-account-number">------</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notifications-container">
+                    <h3 style="margin-bottom: 1rem; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <i data-lucide="bell" style="width: 18px; height: 18px;"></i> Recent Activity
+                    </h3>
+                    
+                    <div id="notifications-list" class="notification-list">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ================= SUCCESS MODAL ================= -->
+    <div id="success-modal">
+        <div class="modal-card">
+            <div class="modal-icon-wrapper">
+                <i data-lucide="check" style="width: 24px; height: 24px;"></i>
+            </div>
+            <h2 style="margin-bottom: 0.5rem;">Transfer Successful</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">Sent to account <span id="success-dest" style="font-weight: 500; color: var(--text-main);"></span></p>
+            
+            <div class="modal-amount" id="success-amount">
+                0 ₫
+            </div>
+
+            <button class="btn btn-primary" onclick="closeSuccessModal()">
+                Done
+            </button>
         </div>
+    </div>
 
-        <form id="login-form" class="form-grid">
-          <label class="field">
-            <span>Username</span>
-            <input name="username" type="text" autocomplete="username" placeholder="alice" required>
-          </label>
-
-          <label class="field">
-            <span>Password</span>
-            <input name="password" type="password" autocomplete="current-password" placeholder="secret123" required>
-          </label>
-
-          <div class="button-row">
-            <button class="button button-primary" type="submit">Sign in</button>
-            <button class="button button-secondary" id="logout-button" type="button">Clear session</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="card card--transfer">
-        <div class="card-head">
-          <p class="eyebrow">Step 2</p>
-          <h2>Transfer</h2>
-          <p>Submit the transfer request with a new idempotency key each time.</p>
-        </div>
-
-        <form id="transfer-form" class="form-grid">
-          <div class="field-grid">
-            <label class="field">
-              <span>Source account</span>
-              <input name="sourceAccount" type="text" inputmode="numeric" placeholder="100001" required>
-            </label>
-
-            <label class="field">
-              <span>Destination account</span>
-              <input name="destinationAccount" type="text" inputmode="numeric" placeholder="200001" required>
-            </label>
-          </div>
-
-          <label class="field">
-            <span>Amount</span>
-            <input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="500.00" required>
-          </label>
-
-          <button class="button button-primary" type="submit">Transfer funds</button>
-        </form>
-      </section>
-
-      <section class="card card--status">
-        <div class="card-head">
-          <p class="eyebrow">Step 3</p>
-          <h2>Status lookup</h2>
-          <p>Query the live transfer state by transfer ID.</p>
-        </div>
-
-        <form id="status-form" class="form-grid">
-          <label class="field">
-            <span>Transfer ID</span>
-            <input id="status-transfer-id" name="transferId" type="text" placeholder="Paste a transfer ID" required>
-          </label>
-
-          <button class="button button-secondary" type="submit">Load status</button>
-        </form>
-      </section>
-
-      <section class="card card--result">
-        <div class="card-head">
-          <p class="eyebrow">Result</p>
-          <h2>Latest response</h2>
-          <p>Successful transfers and lookups will appear here.</p>
-        </div>
-        <div id="result" class="result" aria-live="polite"></div>
-      </section>
-    </main>
-  </div>
-
-  <script src="app.js" defer></script>
+    <!-- Scripts -->
+    <script src="app.js"></script>
 </body>
 </html>

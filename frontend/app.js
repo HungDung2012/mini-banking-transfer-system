@@ -1,399 +1,420 @@
-const API_BASE = window.__API_BASE__ || '';
-const TOKEN_KEY = 'mini-banking-transfer.token';
-const TRANSFER_KEY = 'mini-banking-transfer.lastTransferId';
+// CONFIG
+const API_BASE = 'http://34.60.8.21:8000'; // Kong API Gateway
 
+// STATE variables - stored purely in memory
 const state = {
-  token: sessionStorage.getItem(TOKEN_KEY) || '',
-  profile: null,
-  lastTransferId: sessionStorage.getItem(TRANSFER_KEY) || '',
+    token: null,
+    username: null,
+    accountNumber: null,
+    balance: 0,
+    pollInterval: null
 };
 
-const sessionStateEl = document.getElementById('session-state');
-const resultEl = document.getElementById('result');
-const loginForm = document.getElementById('login-form');
-const transferForm = document.getElementById('transfer-form');
-const statusForm = document.getElementById('status-form');
-const logoutButton = document.getElementById('logout-button');
-const statusTransferInput = document.getElementById('status-transfer-id');
+// INITIALIZE ICONS
+document.addEventListener('DOMContentLoaded', () => {
+    lucide.createIcons();
+});
 
-function init() {
-  hydrateProfile();
-  syncSessionUi();
-  showIdleResult();
+// ---------------- UTILS ----------------
 
-  if (state.lastTransferId) {
-    statusTransferInput.value = state.lastTransferId;
-  }
-
-  loginForm.addEventListener('submit', handleLoginSubmit);
-  transferForm.addEventListener('submit', handleTransferSubmit);
-  statusForm.addEventListener('submit', handleStatusSubmit);
-  logoutButton.addEventListener('click', handleLogout);
-}
-
-function hydrateProfile() {
-  if (!state.token) {
-    state.profile = null;
-    return;
-  }
-
-  state.profile = decodeJwtPayload(state.token);
-}
-
-function syncSessionUi() {
-  const signedIn = Boolean(state.token);
-  logoutButton.disabled = !signedIn;
-  setFormEnabled(transferForm, signedIn);
-  setFormEnabled(statusForm, signedIn);
-
-  if (!signedIn) {
-    sessionStateEl.textContent = 'Signed out';
-    return;
-  }
-
-  const parts = [];
-  if (state.profile?.sub) {
-    parts.push(state.profile.sub);
-  }
-  if (state.profile?.uid !== undefined) {
-    parts.push(`uid ${state.profile.uid}`);
-  }
-  sessionStateEl.textContent = parts.length ? `Signed in as ${parts.join(' / ')}` : 'Signed in';
-}
-
-function showIdleResult() {
-  renderResult({
-    tone: 'neutral',
-    title: 'Waiting for action',
-    summary: 'Sign in, submit a transfer, or look up a transfer ID to see the response here.',
-    fields: [
-      ['API base', API_BASE || 'relative Kong routes'],
-      ['Transfer route', '/api/transfers'],
-      ['Auth route', '/api/auth/login'],
-    ],
-  });
-}
-
-async function handleLoginSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = {
-    username: form.username.value.trim(),
-    password: form.password.value,
-  };
-
-  try {
-    setBusy(form, true);
-    const data = await requestJson('/api/auth/login', {
-      method: 'POST',
-      body: payload,
-      auth: false,
+function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
     });
+}
 
-    if (!data.token) {
-      throw new Error('Login response did not include a token.');
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('vi-VN').format(amount) + ' ₫';
+}
+
+function getRawNumber(str) {
+    return parseInt(str.replace(/[^0-9]/g, ''), 10) || 0;
+}
+
+// Toggle Dark Mode
+function toggleDarkMode() {
+    document.body.classList.toggle('dark');
+    const icon = document.getElementById('dark-mode-icon');
+    if (document.body.classList.contains('dark')) {
+        icon.setAttribute('data-lucide', 'sun');
+    } else {
+        icon.setAttribute('data-lucide', 'moon');
+    }
+    lucide.createIcons();
+}
+
+// ---------------- API CLIENT ----------------
+
+async function apiCall(endpoint, method = 'GET', body = null, useAuth = false, additionalHeaders = {}) {
+    const headers = {
+        'Content-Type': 'application/json',
+        ...additionalHeaders
+    };
+
+    if (useAuth && state.token) {
+        headers['Authorization'] = `Bearer ${state.token}`;
     }
 
-    state.token = data.token;
-    sessionStorage.setItem(TOKEN_KEY, state.token);
-    hydrateProfile();
-    syncSessionUi();
+    const options = {
+        method,
+        headers,
+    };
 
-    renderResult({
-      tone: 'success',
-      title: 'Login succeeded',
-      summary: 'The JWT was stored in session storage and is ready for transfer requests.',
-      fields: [
-        ['Username', state.profile?.sub || payload.username],
-        ['User ID', String(state.profile?.uid ?? 'unknown')],
-      ],
-      raw: { token: abbreviateToken(data.token) },
-    });
-    form.reset();
-  } catch (error) {
-    renderError('Login failed', error);
-  } finally {
-    setBusy(form, false);
-  }
-}
-
-async function handleTransferSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  if (!state.token) {
-    renderResult({
-      tone: 'danger',
-      title: 'Sign in required',
-      summary: 'Use the login form before submitting a transfer.',
-    });
-    return;
-  }
-
-  const payload = {
-    sourceAccount: form.sourceAccount.value.trim(),
-    destinationAccount: form.destinationAccount.value.trim(),
-    amount: Number(form.amount.value),
-  };
-
-  try {
-    setBusy(form, true);
-    const response = await requestJson('/api/transfers', {
-      method: 'POST',
-      body: payload,
-      headers: {
-        'Idempotency-Key': createIdempotencyKey(),
-      },
-    });
-
-    if (!response.transferId) {
-      throw new Error('Transfer response did not include a transferId.');
+    if (body) {
+        options.body = JSON.stringify(body);
     }
 
-    state.lastTransferId = response.transferId;
-    sessionStorage.setItem(TRANSFER_KEY, state.lastTransferId);
-    statusTransferInput.value = state.lastTransferId;
+    try {
+        const response = await fetch(`${API_BASE}${endpoint}`, options);
+        
+        if (response.status === 401 && useAuth) {
+            logout();
+            throw new Error('Session expired. Please log in again.');
+        }
+        
+        const data = await response.json().catch(() => ({}));
 
-    renderResult({
-      tone: response.status === 'SUCCESS' ? 'success' : 'warning',
-      title: 'Transfer submitted',
-      summary: 'The transfer service accepted the request and returned a terminal status.',
-      fields: [
-        ['Transfer ID', response.transferId],
-        ['Status', response.status],
-      ],
-      raw: response,
-    });
-
-    form.reset();
-    form.amount.focus();
-  } catch (error) {
-    renderError('Transfer failed', error);
-  } finally {
-    setBusy(form, false);
-  }
-}
-
-async function handleStatusSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  if (!state.token) {
-    renderResult({
-      tone: 'danger',
-      title: 'Sign in required',
-      summary: 'Use the login form before looking up transfer status.',
-    });
-    return;
-  }
-
-  const transferId = form.transferId.value.trim();
-  if (!transferId) {
-    renderResult({
-      tone: 'danger',
-      title: 'Missing transfer ID',
-      summary: 'Paste a transfer ID before querying status.',
-    });
-    return;
-  }
-
-  try {
-    setBusy(form, true);
-    const response = await requestJson(`/api/transfers/${encodeURIComponent(transferId)}`, {
-      method: 'GET',
-    });
-
-    state.lastTransferId = response.transferId || transferId;
-    sessionStorage.setItem(TRANSFER_KEY, state.lastTransferId);
-
-    renderResult({
-      tone: 'info',
-      title: 'Status loaded',
-      summary: 'The transfer service returned the current stored status for that transfer ID.',
-      fields: [
-        ['Transfer ID', response.transferId || transferId],
-        ['Status', response.status],
-      ],
-      raw: response,
-    });
-  } catch (error) {
-    renderError('Status lookup failed', error);
-  } finally {
-    setBusy(form, false);
-  }
-}
-
-function handleLogout() {
-  state.token = '';
-  state.profile = null;
-  sessionStorage.removeItem(TOKEN_KEY);
-  syncSessionUi();
-  renderResult({
-    tone: 'neutral',
-    title: 'Session cleared',
-    summary: 'You can sign in again at any time.',
-  });
-}
-
-async function requestJson(path, { method, body, auth = true, headers: extraHeaders = {} }) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (auth && state.token) {
-    headers.Authorization = `Bearer ${state.token}`;
-  }
-  Object.assign(headers, extraHeaders);
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-
-  const payload = await readResponseBody(response);
-  if (!response.ok) {
-    const message = payload?.message || payload?.error || response.statusText || 'Request failed';
-    throw new Error(`${message} (${response.status})`);
-  }
-
-  return payload ?? {};
-}
-
-async function readResponseBody(response) {
-  const text = await response.text();
-  if (!text) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { message: text };
-  }
-}
-
-function renderError(title, error) {
-  renderResult({
-    tone: 'danger',
-    title,
-    summary: error instanceof Error ? error.message : String(error),
-  });
-}
-
-function renderResult({ tone, title, summary, fields = [], raw = null }) {
-  resultEl.replaceChildren(buildResultNode(tone, title, summary, fields, raw));
-}
-
-function buildResultNode(tone, title, summary, fields, raw) {
-  const panel = document.createElement('article');
-  panel.className = `result-panel result-panel--${tone}`;
-
-  const header = document.createElement('div');
-  header.className = 'result-header';
-
-  const kicker = document.createElement('p');
-  kicker.className = 'eyebrow';
-  kicker.textContent = tone === 'success' ? 'Success' : tone === 'danger' ? 'Error' : 'Info';
-
-  const heading = document.createElement('h3');
-  heading.textContent = title;
-
-  const summaryEl = document.createElement('p');
-  summaryEl.className = 'result-summary';
-  summaryEl.textContent = summary;
-
-  header.append(kicker, heading, summaryEl);
-  panel.append(header);
-
-  if (fields.length) {
-    const dl = document.createElement('dl');
-    dl.className = 'result-grid';
-
-    fields.forEach(([label, value]) => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'result-item';
-
-      const dt = document.createElement('dt');
-      dt.textContent = label;
-
-      const dd = document.createElement('dd');
-      dd.textContent = value;
-
-      wrapper.append(dt, dd);
-      dl.append(wrapper);
-    });
-
-    panel.append(dl);
-  }
-
-  if (raw) {
-    const pre = document.createElement('pre');
-    pre.className = 'result-json';
-    pre.textContent = JSON.stringify(raw, null, 2);
-    panel.append(pre);
-  }
-
-  return panel;
-}
-
-function setBusy(form, busy) {
-  form.querySelectorAll('input, button').forEach((control) => {
-    if (control === logoutButton) {
-      return;
+        if (!response.ok) {
+            throw new Error(data.message || data.error || 'Request failed');
+        }
+        
+        return data;
+    } catch (error) {
+        if(error.message === 'Failed to fetch') {
+            throw new Error('Network error. Check connection or API base URL.');
+        }
+        throw error;
     }
-    control.disabled = busy;
-  });
 }
 
-function setFormEnabled(form, enabled) {
-  form.querySelectorAll('input, button').forEach((control) => {
-    if (control === logoutButton) {
-      return;
+// ---------------- AUTHENTICATION ----------------
+
+window.switchAuthTab = function(tab) {
+    document.querySelectorAll('.auth-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+
+    if (tab === 'login') {
+        document.getElementById('login-form').classList.remove('hidden');
+        document.getElementById('register-form').classList.add('hidden');
+    } else {
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('register-form').classList.remove('hidden');
     }
-    control.disabled = !enabled;
-  });
+    clearErrors();
 }
 
-function decodeJwtPayload(token) {
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payload = base64UrlDecode(parts[1]);
-    return JSON.parse(payload);
-  } catch {
-    return null;
-  }
+function clearErrors() {
+    document.getElementById('login-error').classList.add('hidden');
+    document.getElementById('register-error').classList.add('hidden');
+    document.getElementById('transfer-error').classList.add('hidden');
 }
 
-function base64UrlDecode(value) {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
-  return atob(padded);
+function showError(elementId, message) {
+    const el = document.getElementById(elementId);
+    el.innerHTML = `<i data-lucide="alert-circle" style="width:16px; height:16px;"></i> ${message}`;
+    el.classList.remove('hidden');
+    lucide.createIcons();
 }
 
-function abbreviateToken(token) {
-  if (token.length <= 24) {
-    return token;
-  }
-  return `${token.slice(0, 16)}...${token.slice(-8)}`;
+function setButtonLoading(btnId, isLoading, originalText) {
+    const btn = document.getElementById(btnId);
+    if (isLoading) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="spin" style="width:16px;height:16px;"></i> <span>Processing...</span>`;
+    } else {
+        btn.disabled = false;
+        btn.innerHTML = `<span>${originalText}</span>`;
+    }
+    lucide.createIcons();
 }
 
-function createIdempotencyKey() {
-  if (window.crypto?.randomUUID) {
-    return window.crypto.randomUUID();
-  }
-
-  if (window.crypto?.getRandomValues) {
-    const bytes = new Uint8Array(16);
-    window.crypto.getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  }
-
-  return `idem-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+window.handleLogin = async function(e) {
+    e.preventDefault();
+    clearErrors();
+    const u = document.getElementById('login-username').value;
+    const p = document.getElementById('login-password').value;
+         initApp();
+    setButtonLoading('btn-login', true, 'Sign In');
+    try {
+        const res = await apiCall('/api/auth/login', 'POST', { username: u, password: p });
+        if (res.token) {
+            state.token = res.token;
+            state.username = u;
+            state.accountNumber = res.accountNumber;
+            state.balance = res.balance || 0;
+            initApp();
+        } else {
+            showError('login-error', 'Login failed: Missing token');
+        }
+    } catch (err) {
+        showError('login-error', err.message);
+    } finally {
+        setButtonLoading('btn-login', false, 'Sign In');
+    }
 }
 
-init();
+window.handleRegister = async function(e) {
+    e.preventDefault();
+    clearErrors();
+    const u = document.getElementById('reg-username').value;
+    const a = document.getElementById('reg-account').value;
+    const p = document.getElementById('reg-password').value;
+
+    setButtonLoading('btn-register', true, 'Create Account');
+    try {
+        await apiCall('/api/auth/register', 'POST', { username: u, password: p, accountNumber: a });
+        // Auto login after register
+        switchAuthTab('login');
+        document.getElementById('login-username').value = u;
+        document.getElementById('login-password').value = p;
+        
+        // Show temporary success message
+        const errEl = document.getElementById('login-error');
+        errEl.innerHTML = `<i data-lucide="check-circle" style="width:16px; height:16px;"></i> Registration successful! Please log in.`;
+        errEl.className = 'error-message';
+        errEl.style.color = 'var(--success)';
+        lucide.createIcons();
+
+    } catch (err) {
+        showError('register-error', err.message);
+    } finally {
+        setButtonLoading('btn-register', false, 'Create Account');
+    }
+}
+
+function initApp() {
+    document.getElementById('auth-view').style.display = 'none';
+    document.getElementById('app-view').style.display = 'block';
+    
+    document.getElementById('display-username').textContent = state.username;
+    document.getElementById('display-account-number').textContent = state.accountNumber;
+    updateBalanceUI(state.balance);
+
+    // Fetch latest real data
+    fetchBalance();
+    fetchNotifications();
+
+    // Setup polling
+    if(state.pollInterval) clearInterval(state.pollInterval);
+    state.pollInterval = setInterval(fetchNotifications, 15000); // 15s poll
+}
+
+window.logout = function() {
+    state.token = null;
+    state.username = null;
+    state.accountNumber = null;
+    state.balance = 0;
+    
+    if(state.pollInterval) {
+        clearInterval(state.pollInterval);
+        state.pollInterval = null;
+    }
+
+    document.getElementById('app-view').style.display = 'none';
+    document.getElementById('auth-view').style.display = 'flex';
+    
+    // Clear forms
+    document.getElementById('login-password').value = '';
+    document.getElementById('transfer-dest').value = '';
+    document.getElementById('transfer-amount').value = '';
+    document.getElementById('btn-transfer').disabled = true;
+    clearErrors();
+}
+
+// ---------------- MAIN APP LOGIC ----------------
+
+window.fetchBalance = async function() {
+    const icon = document.getElementById('refresh-icon');
+    if(icon) icon.classList.add('spin');
+    
+    try {
+        const res = await apiCall('/api/accounts/balance', 'GET', null, true);
+        if (res.balance !== undefined) {
+            state.balance = res.balance;
+            updateBalanceUI(state.balance);
+        }
+    } catch (err) {
+        console.error("Failed to fetch balance:", err);
+    } finally {
+        if(icon) setTimeout(() => icon.classList.remove('spin'), 500);
+    }
+}
+
+function updateBalanceUI(amount) {
+    document.getElementById('display-balance').textContent = formatCurrency(amount);
+}
+
+// Transfer Form Handling
+window.formatAmountInput = function(input) {
+    let val = getRawNumber(input.value);
+    if (val === 0) {
+        input.value = '';
+    } else {
+        input.value = new Intl.NumberFormat('vi-VN').format(val);
+    }
+}
+
+window.setQuickAmount = function(amount) {
+    const input = document.getElementById('transfer-amount');
+    input.value = new Intl.NumberFormat('vi-VN').format(amount);
+    updateSummary();
+}
+
+window.updateSummary = function() {
+    const dest = document.getElementById('transfer-dest').value.trim();
+    const amountRaw = getRawNumber(document.getElementById('transfer-amount').value);
+    const btn = document.getElementById('btn-transfer');
+
+    if (dest && amountRaw > 0) {
+        btn.disabled = false;
+    } else {
+        btn.disabled = true;
+    }
+}
+
+window.handleTransfer = async function(e) {
+    e.preventDefault();
+    clearErrors();
+    
+    const dest = document.getElementById('transfer-dest').value.trim();
+    const amountRaw = getRawNumber(document.getElementById('transfer-amount').value);
+
+    if (amountRaw <= 0) {
+        showError('transfer-error', "Amount must be greater than 0");
+        return;
+    }
+    if (dest === state.accountNumber) {
+        showError('transfer-error', "Cannot transfer to your own account");
+        return;
+    }
+
+    setButtonLoading('btn-transfer', true, 'Processing Transfer');
+    const idempotencyKey = uuidv4();
+    
+    try {
+        const payload = {
+            sourceAccount: state.accountNumber,
+            destinationAccount: dest,
+            amount: amountRaw
+        };
+
+        const res = await apiCall('/api/transfers', 'POST', payload, true, {
+            'Idempotency-Key': idempotencyKey
+        });
+
+        if (res.status === 'SUCCESS' || res.status === 'PENDING') {
+            // Success!
+            showSuccessModal(dest, amountRaw);
+            
+            // Reset form
+            document.getElementById('transfer-dest').value = '';
+            document.getElementById('transfer-amount').value = '';
+            updateSummary();
+            
+            // Immediately fetch updated balance
+            setTimeout(fetchBalance, 500); 
+            // Fetch notifications to show the sent notification
+            setTimeout(fetchNotifications, 1000);
+        } else if (res.status === 'FAILED' || res.status === 'REJECTED') {
+            showError('transfer-error', `Transfer failed: ${res.message || 'Unknown reason'}`);
+        }
+
+    } catch (err) {
+        showError('transfer-error', err.message);
+    } finally {
+        setButtonLoading('btn-transfer', false, 'Confirm Transfer');
+        updateSummary(); // Will re-evaluate if button should be disabled
+    }
+}
+
+// Render Notifications
+async function fetchNotifications() {
+    try {
+        const data = await apiCall('/api/notifications', 'GET', null, true);
+        renderNotifications(data);
+    } catch (err) {
+        console.error("Poll notification error:", err);
+    }
+}
+
+function renderNotifications(notifs) {
+    const listEl = document.getElementById('notifications-list');
+    listEl.innerHTML = '';
+
+    if (!notifs || notifs.length === 0) {
+        listEl.innerHTML = `
+            <div class="empty-state">
+                <p>No new notifications</p>
+            </div>
+        `;
+        return;
+    }
+
+    const sorted = [...notifs].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    sorted.forEach(n => {
+        const dateRaw = new Date(n.createdAt);
+        const now = new Date();
+        const diffSec = Math.floor((now - dateRaw)/1000);
+        let timeStr = dateRaw.toLocaleString();
+        if(diffSec < 60) timeStr = 'Just now';
+        else if(diffSec < 3600) timeStr = `${Math.floor(diffSec/60)}m ago`;
+        else if(diffSec < 86400) timeStr = `${Math.floor(diffSec/3600)}h ago`;
+
+        const html = `
+            <div class="notification-item">
+                <div class="notification-icon">
+                    <i data-lucide="bell" style="width: 16px; height: 16px;"></i>
+                </div>
+                <div class="notification-content" style="flex:1;">
+                    <div class="notification-title">${n.title || 'Notification'}</div>
+                    <div class="notification-body">${n.body || ''}</div>
+                    <span class="notification-time">${timeStr}</span>
+                </div>
+            </div>
+        `;
+        listEl.insertAdjacentHTML('beforeend', html);
+    });
+    lucide.createIcons();
+}
+
+// Success Output Flow
+window.showSuccessModal = function(dest, amount) {
+    document.getElementById('success-dest').textContent = dest;
+    document.getElementById('success-amount').textContent = formatCurrency(amount);
+    document.getElementById('success-modal').classList.add('active');
+    fireConfetti();
+}
+
+window.closeSuccessModal = function() {
+    document.getElementById('success-modal').classList.remove('active');
+}
+
+function fireConfetti() {
+    if (typeof confetti === 'function') {
+        var duration = 3 * 1000;
+        var end = Date.now() + duration;
+
+        (function frame() {
+            confetti({
+                particleCount: 5,
+                angle: 60,
+                spread: 55,
+                origin: { x: 0 },
+                colors: ['#000000', '#3b82f6', '#ffffff'] // Adjusted to minimal palette
+            });
+            confetti({
+                particleCount: 5,
+                angle: 120,
+                spread: 55,
+                origin: { x: 1 },
+                colors: ['#000000', '#3b82f6', '#ffffff']
+            });
+
+            if (Date.now() < end) {
+                requestAnimationFrame(frame);
+            }
+        }());
+    }
+}
