@@ -77,6 +77,22 @@ async function resolveAccountNumberForUser(username) {
     return null;
 }
 
+async function ensureAccountExists(username, accountNumber) {
+    const createdAccount = await apiCall('/api/accounts', 'POST', {
+        accountNumber: accountNumber,
+        ownerName: username,
+        balance: 0
+    });
+
+    if (createdAccount && createdAccount.accountNumber) {
+        saveAccountNumber(username, createdAccount.accountNumber);
+        return createdAccount.accountNumber;
+    }
+
+    saveAccountNumber(username, accountNumber);
+    return accountNumber;
+}
+
 function persistSession() {
     if (state.token) {
         sessionStorage.setItem(TOKEN_KEY, state.token);
@@ -242,12 +258,7 @@ window.handleRegister = async function(e) {
     setButtonLoading('btn-register', true, 'Create Account');
     try {
         await apiCall('/api/auth/register', 'POST', { username: u, password: p });
-        await apiCall('/api/accounts', 'POST', {
-            accountNumber: a,
-            ownerName: u,
-            balance: 0
-        });
-        saveAccountNumber(u, a);
+        await ensureAccountExists(u, a);
         // Auto login after register
         switchAuthTab('login');
         document.getElementById('login-username').value = u;
@@ -267,7 +278,12 @@ window.handleRegister = async function(e) {
                 saveAccountNumber(u, existingAccountNumber);
                 showError('register-error', 'Username already exists. Try signing in with that account.');
             } else {
-                showError('register-error', 'Username already exists, but no linked account was found yet. Please sign in or choose another username.');
+                try {
+                    await ensureAccountExists(u, a);
+                    showError('register-error', 'Username already existed, but the account link has now been created. Please sign in.');
+                } catch (accountError) {
+                    showError('register-error', 'Username already exists, but no linked account was found yet. Please sign in or choose another username.');
+                }
             }
         } else {
             showError('register-error', err.message);
