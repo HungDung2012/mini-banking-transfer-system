@@ -1,5 +1,9 @@
 // CONFIG
-const API_BASE = 'http://34.60.8.21:8000'; // Kong API Gateway
+const API_BASE = window.__API_BASE__ || '';
+const DEMO_ACCOUNT_MAP = {
+    alice: '100001',
+    bob: '200001'
+};
 
 // STATE variables - stored purely in memory
 const state = {
@@ -30,6 +34,10 @@ function formatCurrency(amount) {
 
 function getRawNumber(str) {
     return parseInt(str.replace(/[^0-9]/g, ''), 10) || 0;
+}
+
+function resolveAccountNumber(username) {
+    return DEMO_ACCOUNT_MAP[username] || null;
 }
 
 // Toggle Dark Mode
@@ -141,8 +149,8 @@ window.handleLogin = async function(e) {
         if (res.token) {
             state.token = res.token;
             state.username = u;
-            state.accountNumber = res.accountNumber;
-            state.balance = res.balance || 0;
+            state.accountNumber = resolveAccountNumber(u);
+            state.balance = 0;
             initApp();
         } else {
             showError('login-error', 'Login failed: Missing token');
@@ -163,7 +171,12 @@ window.handleRegister = async function(e) {
 
     setButtonLoading('btn-register', true, 'Create Account');
     try {
-        await apiCall('/api/auth/register', 'POST', { username: u, password: p, accountNumber: a });
+        await apiCall('/api/auth/register', 'POST', { username: u, password: p });
+        await apiCall('/api/accounts', 'POST', {
+            accountNumber: a,
+            ownerName: u,
+            balance: 0
+        });
         // Auto login after register
         switchAuthTab('login');
         document.getElementById('login-username').value = u;
@@ -193,11 +206,11 @@ function initApp() {
 
     // Fetch latest real data
     fetchBalance();
-    fetchNotifications();
+    renderNotifications([]);
 
-    // Setup polling
+    // Notifications API is not exposed in the current gateway flow.
     if(state.pollInterval) clearInterval(state.pollInterval);
-    state.pollInterval = setInterval(fetchNotifications, 15000); // 15s poll
+    state.pollInterval = null;
 }
 
 window.logout = function() {
@@ -229,10 +242,17 @@ window.fetchBalance = async function() {
     if(icon) icon.classList.add('spin');
     
     try {
-        const res = await apiCall('/api/accounts/balance', 'GET', null, true);
+        if (!state.accountNumber) {
+            return;
+        }
+        const res = await apiCall(`/api/accounts/${encodeURIComponent(state.accountNumber)}`, 'GET', null, false);
         if (res.balance !== undefined) {
             state.balance = res.balance;
             updateBalanceUI(state.balance);
+            if (res.accountNumber) {
+                state.accountNumber = res.accountNumber;
+                document.getElementById('display-account-number').textContent = res.accountNumber;
+            }
         }
     } catch (err) {
         console.error("Failed to fetch balance:", err);
@@ -284,6 +304,10 @@ window.handleTransfer = async function(e) {
         showError('transfer-error', "Amount must be greater than 0");
         return;
     }
+    if (!state.accountNumber) {
+        showError('transfer-error', "No source account is linked to this session.");
+        return;
+    }
     if (dest === state.accountNumber) {
         showError('transfer-error', "Cannot transfer to your own account");
         return;
@@ -314,8 +338,6 @@ window.handleTransfer = async function(e) {
             
             // Immediately fetch updated balance
             setTimeout(fetchBalance, 500); 
-            // Fetch notifications to show the sent notification
-            setTimeout(fetchNotifications, 1000);
         } else if (res.status === 'FAILED' || res.status === 'REJECTED') {
             showError('transfer-error', `Transfer failed: ${res.message || 'Unknown reason'}`);
         }
@@ -330,12 +352,7 @@ window.handleTransfer = async function(e) {
 
 // Render Notifications
 async function fetchNotifications() {
-    try {
-        const data = await apiCall('/api/notifications', 'GET', null, true);
-        renderNotifications(data);
-    } catch (err) {
-        console.error("Poll notification error:", err);
-    }
+    renderNotifications([]);
 }
 
 function renderNotifications(notifs) {
