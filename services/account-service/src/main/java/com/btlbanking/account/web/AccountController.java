@@ -27,7 +27,7 @@ public class AccountController {
   }
 
   @GetMapping("/{accountNumber}")
-  public AccountResponse get(@PathVariable String accountNumber) {
+  public AccountResponse get(@PathVariable("accountNumber") String accountNumber) {
     return service.get(accountNumber);
   }
 

@@ -1,6 +1,7 @@
 package com.btlbanking.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -76,6 +77,22 @@ class AccountControllerIT {
                 {"accountNumber":"100001","amount":200}
                 """))
         .andExpect(status().isConflict());
+  }
+
+  @Test
+  void get_returns_the_requested_account_by_account_number() throws Exception {
+    mockMvc.perform(post("/accounts")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"accountNumber":"100001","ownerName":"Alice","balance":1000}
+                """))
+        .andExpect(status().isCreated());
+
+    mockMvc.perform(get("/accounts/100001"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.accountNumber").value("100001"))
+        .andExpect(jsonPath("$.ownerName").value("Alice"))
+        .andExpect(jsonPath("$.balance").value(1000));
   }
 
   @Test

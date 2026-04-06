@@ -13,6 +13,8 @@ services=(
   "audit-service:services/audit-service"
 )
 
+ports=(8081 8082 8083 8084 8085 8086)
+
 if [[ ! -d "$PID_DIR" ]]; then
   echo "No pid directory found."
   mkdir -p "$PID_DIR"
@@ -59,5 +61,16 @@ for entry in "${services[@]}"; do
       [[ -n "$pid" ]] || continue
       kill -9 "$pid" 2>/dev/null || true
     done <<< "$lingering_pids"
+  fi
+done
+
+for port in "${ports[@]}"; do
+  port_pids="$(sudo lsof -ti tcp:"$port" 2>/dev/null || true)"
+  if [[ -n "$port_pids" ]]; then
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
+      echo "Stopping process on port $port ($pid)"
+      sudo kill -9 "$pid" 2>/dev/null || true
+    done <<< "$port_pids"
   fi
 done
