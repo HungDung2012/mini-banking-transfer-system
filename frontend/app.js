@@ -114,14 +114,12 @@ async function apiCall(endpoint, method = 'GET', body = null, useAuth = false, a
     try {
         const response = await fetch(`${API_BASE}${endpoint}`, options);
         
-        if (response.status === 401 && useAuth) {
-            logout();
-            throw new Error('Session expired. Please log in again.');
-        }
-        
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
+            if (response.status === 401 && useAuth) {
+                throw new Error('Unauthorized request. Please log in again or try a permitted account.');
+            }
             if (response.status === 409 && endpoint === '/api/auth/register') {
                 throw new Error('Username already exists. Please choose another username.');
             }

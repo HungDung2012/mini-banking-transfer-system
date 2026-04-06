@@ -1,6 +1,7 @@
 package com.btlbanking.auth.web;
 
 import com.btlbanking.auth.service.DuplicateUsernameException;
+import com.btlbanking.auth.service.KongProvisioningException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,5 +31,10 @@ public class AuthExceptionHandler {
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<Void> handleValidation(MethodArgumentNotValidException ex) {
     return ResponseEntity.badRequest().build();
+  }
+
+  @ExceptionHandler(KongProvisioningException.class)
+  public ResponseEntity<Void> handleKongProvisioning(KongProvisioningException ex) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
   }
 }

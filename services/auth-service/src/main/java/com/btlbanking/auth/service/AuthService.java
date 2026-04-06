@@ -8,18 +8,23 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional
 public class AuthService {
 
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtService jwtService;
+  private final KongProvisioningService kongProvisioningService;
 
-  public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+  public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+      JwtService jwtService, KongProvisioningService kongProvisioningService) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
+    this.kongProvisioningService = kongProvisioningService;
   }
 
   public AuthResponse register(AuthRequest request) {
@@ -33,6 +38,7 @@ public class AuthService {
 
     try {
       var savedUser = userRepository.save(user);
+      kongProvisioningService.ensureConsumer(savedUser.getUsername());
       return new AuthResponse(jwtService.generateToken(savedUser.getUsername(), savedUser.getId()));
     } catch (DataIntegrityViolationException ex) {
       throw new DuplicateUsernameException(request.username(), ex);

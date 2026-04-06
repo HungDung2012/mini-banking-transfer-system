@@ -53,6 +53,14 @@ jobs:
               chmod +x scripts/start-services.sh scripts/stop-services.sh scripts/seed-demo-data.sh
               sudo docker-compose -f infra/docker-compose.yml --profile core down --remove-orphans || true
               sudo docker-compose -f infra/docker-compose.yml --profile core up -d
+              until curl -fsS http://localhost:8001/status >/dev/null; do
+                echo "Waiting for Kong Admin API..."
+                sleep 2
+              done
+              until curl -fsS http://localhost:8001/services/transaction-service >/dev/null; do
+                echo "Waiting for Kong bootstrap data..."
+                sleep 2
+              done
               ./scripts/stop-services.sh || true
               ./scripts/start-services.sh
               sleep 30

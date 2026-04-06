@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ public class OutboxPublisher {
     return repository.save(entity);
   }
 
+  @Scheduled(fixedDelay = 2000L)
   public void publishPendingEvents() {
     KafkaTemplate<String, String> kafkaTemplate = kafkaTemplateProvider.getIfAvailable();
     if (kafkaTemplate == null) {
