@@ -87,6 +87,7 @@ API endpoints such as `/api/auth/login` are backend routes and are not meant to 
 3. Seed the demo users and accounts with `powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1`.
 4. Run the smoke verification with `powershell -ExecutionPolicy Bypass -File scripts/smoke-auth-transfer.ps1`.
 5. Open the frontend in a browser and use the seeded `alice` account to log in and inspect the transfer result.
+6. Log in as `bob` after a successful transfer from `alice` to confirm the destination account sees the incoming transfer notification.
 
 The demo scripts use the Kong gateway at `http://localhost:8000` by default. The seed script talks to the auth and account services directly, and both scripts allow overriding base URLs with environment variables if the local ports are different.
 
@@ -171,6 +172,12 @@ Demo credentials:
 - Password: `secret123`
 - Username: `bob`
 - Password: `secret123`
+
+Notification behavior:
+
+- Incoming transfer notifications are shown for the destination account holder.
+- Example: transfer from `alice` account `100001` to `bob` account `200001`, then log in as `bob` to see the received-money notification.
+- Registering an existing username returns a conflict and should be handled as "username already exists".
 
 Demo commands on Windows:
 

@@ -33,6 +33,12 @@ public class NotificationEntity {
   @Column(nullable = false)
   private String message;
 
+  @Column(name = "recipient_account", nullable = false)
+  private String recipientAccount;
+
+  @Column(name = "source_account")
+  private String sourceAccount;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -41,8 +47,11 @@ public class NotificationEntity {
     entity.setEventId(event.eventId());
     entity.setTransferId(event.transferId());
     entity.setEventType(event.eventType());
-    entity.setStatus(event.status());
-    entity.setMessage("Transfer " + event.status() + " for " + event.transferId());
+    entity.setStatus(event.status().name());
+    entity.setRecipientAccount(event.destinationAccount());
+    entity.setSourceAccount(event.sourceAccount());
+    entity.setMessage("Ban vua nhan " + event.amount().stripTrailingZeros().toPlainString()
+        + " VND tu tai khoan " + event.sourceAccount());
     entity.setCreatedAt(Instant.now());
     return entity;
   }
@@ -93,6 +102,22 @@ public class NotificationEntity {
 
   public void setMessage(String message) {
     this.message = message;
+  }
+
+  public String getRecipientAccount() {
+    return recipientAccount;
+  }
+
+  public void setRecipientAccount(String recipientAccount) {
+    this.recipientAccount = recipientAccount;
+  }
+
+  public String getSourceAccount() {
+    return sourceAccount;
+  }
+
+  public void setSourceAccount(String sourceAccount) {
+    this.sourceAccount = sourceAccount;
   }
 
   public Instant getCreatedAt() {

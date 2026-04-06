@@ -122,7 +122,10 @@ async function apiCall(endpoint, method = 'GET', body = null, useAuth = false, a
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error(data.message || data.error || 'Request failed');
+            if (response.status === 409 && endpoint === '/api/auth/register') {
+                throw new Error('Username already exists. Please choose another username.');
+            }
+            throw new Error(data.message || data.error || `Request failed (${response.status})`);
         }
         
         return data;
@@ -252,11 +255,10 @@ function initApp() {
 
     // Fetch latest real data
     fetchBalance();
-    renderNotifications([]);
+    fetchNotifications();
 
-    // Notifications API is not exposed in the current gateway flow.
     if(state.pollInterval) clearInterval(state.pollInterval);
-    state.pollInterval = null;
+    state.pollInterval = setInterval(fetchNotifications, 10000);
 }
 
 window.logout = function() {
@@ -399,7 +401,23 @@ window.handleTransfer = async function(e) {
 
 // Render Notifications
 async function fetchNotifications() {
-    renderNotifications([]);
+    try {
+        if (!state.accountNumber) {
+            renderNotifications([]);
+            return;
+        }
+
+        const notifications = await apiCall(
+            `/api/notifications/recipient/${encodeURIComponent(state.accountNumber)}`,
+            'GET',
+            null,
+            false
+        );
+        renderNotifications(notifications);
+    } catch (err) {
+        console.error('Failed to fetch notifications:', err);
+        renderNotifications([]);
+    }
 }
 
 function renderNotifications(notifs) {

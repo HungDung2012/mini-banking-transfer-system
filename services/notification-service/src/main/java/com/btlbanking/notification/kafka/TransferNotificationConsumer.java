@@ -27,6 +27,11 @@ public class TransferNotificationConsumer {
       return;
     }
 
+    if (!"TRANSFER_COMPLETED".equals(event.eventType())) {
+      processedEventRepository.save(new ProcessedEventEntity(event.eventId(), event.transferId()));
+      return;
+    }
+
     notificationRepository.save(NotificationEntity.from(event));
     processedEventRepository.save(new ProcessedEventEntity(event.eventId(), event.transferId()));
   }
