@@ -205,3 +205,60 @@ If something fails, check:
 2. `logs/auth-service.log`
 3. `logs/account-service.log`
 4. `logs/transaction-service.log`
+
+1. Đăng ký / đăng nhập
+
+Frontend gọi /api/auth/register hoặc /api/auth/login.
+Route này đi qua Kong theo infra/kong/kong.yml.
+Trong AuthService.java:
+register() lưu user, rồi gọi kongProvisioningService.ensureConsumer(...), sau đó mới sinh JWT.
+login() kiểm tra mật khẩu đúng, rồi cũng gọi ensureConsumer(...), sau đó sinh JWT.
+Việc provision Kong nằm ở KongProvisioningService.java:
+tạo consumer trong Kong
+tạo JWT secret cho consumer đó
+Điểm rất đáng nói với thầy:
+nếu Kong provisioning lỗi trong lúc đăng ký thì transaction auth bị rollback và trả 503
+điều này được test ở AuthControllerIT.java
+2. Liên kết user với account
+
+Sau khi login, frontend gọi /api/accounts/by-owner/{ownerName} để tìm account number theo username.
+Code nằm ở frontend/app.js, hàm resolveAccountNumberForUser(...).
+Backend hỗ trợ ở AccountController.java với endpoint:
+GET /accounts/by-owner/{ownerName}
+Logic tìm theo owner name ở AccountCommandService.java, method getByOwnerName(...).
+Nếu chưa có account, frontend có thể tạo account mới bằng POST /api/accounts.
+3. Chuyển tiền
+
+Frontend gửi transfer tới /api/transfers kèm Authorization: Bearer ... và Idempotency-Key.
+Trong frontend/app.js, phần này nằm ở handleTransfer(...).
+Transaction Service vẫn là trung tâm điều phối saga ở TransferApplicationService.java:
+tạo giao dịch PENDING
+gọi fraud
+debit nguồn
+credit đích
+nếu credit lỗi thì compensate
+cập nhật trạng thái cuối
+ghi outbox event
+TransferController ở TransferController.java còn cho thấy nó lấy danh tính user từ header:
+X-User-Id
+hoặc X-Consumer-Username
+Đây là điểm bạn có thể nói: transaction-service đang nhận identity ở tầng gateway/header thay vì tự làm auth đầy đủ bên trong.
+4. Thông báo
+
+Frontend giờ không poll /api/notifications chung nữa mà poll theo tài khoản:
+/api/notifications/account/{accountNumber}
+Điều này nằm trong frontend/app.js, hàm fetchNotifications().
+Backend query ở NotificationController.java.
+Logic đọc thông báo theo tài khoản nằm ở NotificationQueryService.java và NotificationRepository.java.
+5. Notification được tạo như thế nào
+
+Ở TransferNotificationConsumer.java:
+nếu event đã xử lý rồi thì bỏ qua
+nếu eventType không phải TRANSFER_COMPLETED thì không tạo notification, chỉ lưu processed marker
+nếu là TRANSFER_COMPLETED thì tạo:
+NotificationEntity.incoming(event)
+NotificationEntity.outgoing(event)
+Nội dung notification nằm ở NotificationEntity.java:
+incoming: “Bạn vừa nhận ...”
+outgoing: “Bạn vừa chuyển ...”
+Test xác nhận hành vi này ở TransferNotificationConsumerTest.java

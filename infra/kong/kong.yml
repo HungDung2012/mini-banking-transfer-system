@@ -1,4 +1,4 @@
-_format_version: "3.0"
+﻿_format_version: "3.0"
 _transform: true
 
 services:
@@ -16,13 +16,6 @@ services:
         paths:
           - /api/transfers
         strip_path: true
-  - name: account-service
-    url: http://172.30.0.1:8082/accounts
-    routes:
-      - name: account-route
-        paths:
-          - /api/accounts
-        strip_path: true
 
 plugins:
   - name: jwt
@@ -33,3 +26,4 @@ plugins:
         - exp
       header_names:
         - authorization
+

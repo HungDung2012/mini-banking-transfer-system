@@ -1,4 +1,4 @@
-#!/bin/sh
+﻿#!/bin/sh
 set -eu
 
 KONG_ADMIN_URL="${KONG_ADMIN_URL:-http://kong:8001}"
@@ -82,7 +82,6 @@ create_service "transaction-service" "http://172.30.0.1:8084/transfers"
 create_route "transaction-service" "transfer-route" "/api/transfers"
 ensure_jwt_plugin "transaction-service"
 
-create_service "account-service" "http://172.30.0.1:8082/accounts"
-create_route "account-service" "account-route" "/api/accounts"
-
 echo "Kong bootstrap completed."
+
+
