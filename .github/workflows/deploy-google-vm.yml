@@ -5,6 +5,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      deploy_profile:
+        description: "Compose profile to deploy on the VM"
+        required: true
+        default: core
+        type: choice
+        options:
+          - core
+          - full
 
 jobs:
   deploy:
@@ -12,6 +21,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      DEPLOY_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_profile || 'core' }}
 
     steps:
       - name: Checkout
@@ -50,9 +61,10 @@ jobs:
               rm -rf ~/apps/mini-banking-transfer-system/*
               tar -xzf ~/deploy.tgz -C ~/apps/mini-banking-transfer-system
               cd ~/apps/mini-banking-transfer-system
+              PROFILE="${{ env.DEPLOY_PROFILE }}"
               chmod +x scripts/start-services.sh scripts/stop-services.sh scripts/seed-demo-data.sh
-              sudo docker-compose -f infra/docker-compose.yml --profile core down --remove-orphans || true
-              sudo docker-compose -f infra/docker-compose.yml --profile core up -d
+              sudo docker-compose -f infra/docker-compose.yml --profile "$PROFILE" down --remove-orphans || true
+              sudo docker-compose -f infra/docker-compose.yml --profile "$PROFILE" up -d
               until curl -fsS http://localhost:8001/status >/dev/null; do
                 echo "Waiting for Kong Admin API..."
                 sleep 2
@@ -65,4 +77,5 @@ jobs:
               ./scripts/start-services.sh
               sleep 30
               ./scripts/seed-demo-data.sh || true
+              echo "Deploy profile: $PROFILE"
             '

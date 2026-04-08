@@ -153,8 +153,13 @@ Workflow behavior:
 1. Authenticate to Google Cloud with Workload Identity Federation.
 2. Package the current commit with `git archive`.
 3. Copy the bundle to the VM.
-4. Reset the `core` Compose stack on the VM.
+4. Reset the selected Compose profile on the VM.
 5. Restart backend services on the VM.
+
+Manual workflow options:
+
+- `push` to `main` deploys `core`
+- `Run workflow` lets you choose `core` or `full`
 
 ## Demo Checklist
 
@@ -205,6 +210,87 @@ If something fails, check:
 2. `logs/auth-service.log`
 3. `logs/account-service.log`
 4. `logs/transaction-service.log`
+
+## Observability
+
+Application-level observability is now wired in the services, not just the infra stack.
+
+What is instrumented:
+
+- HTTP request metrics and traces via Spring Boot Actuator + Micrometer Tracing
+- Prometheus scrape endpoints on each service at `/actuator/prometheus`
+- OTLP trace export to the OpenTelemetry Collector
+- correlated logs with `traceId`, `spanId`, and `requestId`
+- business metrics/logs in:
+  - auth register/login
+  - account create/debit/credit
+  - fraud decision evaluation
+  - transfer orchestration and outcome
+  - notification consume
+  - audit consume
+
+To run the full observability stack locally:
+
+```powershell
+docker compose -f infra/docker-compose.yml --profile full up -d
+powershell -ExecutionPolicy Bypass -File scripts/start-services.ps1
+powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
+```
+
+To deploy the full stack on the VM:
+
+1. Open GitHub Actions.
+2. Run `Deploy Google VM`.
+3. Choose `deploy_profile = full`.
+
+Observability URLs on the VM:
+
+- Frontend: `http://<VM_EXTERNAL_IP>/`
+- Kong Admin: `http://<VM_EXTERNAL_IP>:8001`
+- Prometheus: `http://<VM_EXTERNAL_IP>:9090`
+- Grafana: `http://<VM_EXTERNAL_IP>:3000`
+- Jaeger: `http://<VM_EXTERNAL_IP>:16686`
+- Kibana: `http://<VM_EXTERNAL_IP>:5601`
+
+Default demo credentials:
+
+- frontend demo users: `alice / secret123`, `bob / secret123`
+- Grafana: `admin / admin`
+
+What to check in Prometheus:
+
+- `http_server_requests_seconds`
+- `banking_auth_register_success_total`
+- `banking_auth_login_success_total`
+- `banking_transfer_requests_total`
+- `banking_transfer_duration`
+- `banking_fraud_decisions_total`
+- `banking_notification_events_total`
+- `banking_audit_events_total`
+
+What to check in Jaeger:
+
+- choose service `transaction-service`
+- run a transfer from the frontend
+- inspect the trace to see:
+  - inbound HTTP span on `transaction-service`
+  - outbound calls to `fraud-detection-service`
+  - outbound calls to `account-service`
+  - downstream consume flow in `notification-service` and `audit-service`
+
+What to check in logs:
+
+- each service log line should include:
+  - `traceId`
+  - `spanId`
+  - `requestId`
+- transaction logs should show transfer lifecycle with user/account/amount/status
+
+If Grafana or Jaeger is unreachable on the VM, verify:
+
+1. the workflow was run with `deploy_profile=full`
+2. Google Cloud firewall allows ports `3000`, `9090`, `16686`, and `5601`
+3. `docker ps` on the VM shows `grafana`, `prometheus`, `jaeger`, `otel-collector`
 
 1. Đăng ký / đăng nhập
 
