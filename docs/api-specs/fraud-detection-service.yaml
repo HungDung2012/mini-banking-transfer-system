@@ -1,0 +1,58 @@
+﻿openapi: 3.0.3
+info:
+  title: Fraud Detection Service API
+  version: 1.0.0
+  description: API kiểm tra gian lận và observability endpoint của fraud-detection-service.
+servers:
+  - url: /
+paths:
+  /fraud/check:
+    post:
+      summary: Kiểm tra gian lận cho giao dịch chuyển tiền
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FraudCheckRequest'
+      responses:
+        '200':
+          description: Quyết định kiểm tra gian lận
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FraudCheckResponse'
+        '400':
+          description: Payload không hợp lệ
+  /actuator/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Trạng thái service
+  /actuator/prometheus:
+    get:
+      summary: Export metrics cho Prometheus
+      responses:
+        '200':
+          description: Metrics text format
+components:
+  schemas:
+    FraudCheckRequest:
+      type: object
+      required: [sourceAccount, destinationAccount, amount]
+      properties:
+        sourceAccount:
+          type: string
+        destinationAccount:
+          type: string
+        amount:
+          type: number
+          format: double
+    FraudCheckResponse:
+      type: object
+      properties:
+        decision:
+          type: string
+        reason:
+          type: string

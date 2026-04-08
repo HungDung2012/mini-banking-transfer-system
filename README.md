@@ -1,38 +1,152 @@
-# Mini Banking Transfer System
+﻿# Mini Banking Transfer System
 
-Modules live under `services/`, infrastructure lives under `infra/`, and the browser UI lives under `frontend/`.
-Use `mvn -q validate` to verify the bootstrap reactor.
+Hệ thống mô phỏng quy trình chuyển tiền nội bộ theo kiến trúc microservices. Dự án tập trung vào các vấn đề kỹ thuật thường gặp trong hệ phân tán: xác thực qua gateway, orchestration saga, idempotency, outbox pattern, event-driven communication và observability.
 
-## How To Run
+## 1. Mục tiêu dự án
 
-`infra/docker-compose.yml` only starts shared infrastructure such as Kong, Kafka, Redis, PostgreSQL, Jaeger, Grafana, and Elasticsearch.
-The Spring Boot services under `services/` are not part of the Compose file, so they must be started separately in their own terminals.
+Phạm vi nghiệp vụ chính:
+- đăng ký và đăng nhập người dùng
+- chuyển tiền giữa hai tài khoản trong cùng hệ thống
+- kiểm tra gian lận trước khi xử lý giao dịch
+- ghi nhận trạng thái giao dịch và cơ chế bù trừ khi có lỗi
+- tạo notification cho người gửi và người nhận
+- lưu audit trail cho các transfer event
+- theo dõi metrics, traces và logs của toàn hệ thống
 
-### 1. Start infrastructure
+## 2. Kiến trúc tổng quan
 
-For day-to-day development on a weaker machine, start only the core stack:
+Các thành phần chính:
+- `frontend/`: giao diện web tĩnh dùng HTML/CSS/JavaScript
+- `infra/nginx`: serve frontend và reverse proxy cho `/api/*`
+- `infra/kong`: API Gateway cho `auth` và `transfer`, kiểm tra JWT cho API chuyển tiền
+- `services/auth-service`: đăng ký, đăng nhập, sinh JWT, đồng bộ consumer/JWT credential vào Kong
+- `services/account-service`: tạo tài khoản, tra cứu tài khoản, debit, credit, compensate
+- `services/fraud-detection-service`: kiểm tra các luật chống gian lận đơn giản
+- `services/transaction-service`: điều phối saga chuyển tiền, idempotency, outbox, Kafka publish
+- `services/notification-service`: consume transfer event và tạo thông báo incoming/outgoing
+- `services/audit-service`: consume transfer event và lưu audit record
+- `PostgreSQL`: lưu dữ liệu nghiệp vụ
+- `Redis`: lưu `Idempotency-Key`
+- `Kafka`: truyền transfer event giữa transaction-service và các consumer
+- `Prometheus`, `Grafana`, `Jaeger`, `OpenTelemetry Collector`, `Elasticsearch`, `Kibana`, `Filebeat`: stack observability
+
+### Routing thực tế
+
+- `Frontend -> Nginx -> Kong -> auth-service`
+- `Frontend -> Nginx -> Kong -> transaction-service`
+- `Frontend -> Nginx -> account-service`
+- `Frontend -> Nginx -> notification-service`
+
+Nghĩa là:
+- `auth` và `transfer` đi qua Kong
+- `account` và `notification` được Nginx route trực tiếp
+
+## 3. Các pattern đã áp dụng
+
+- `API Gateway`: Kong được dùng để route auth/transfer và kiểm tra JWT cho API chuyển tiền.
+- `Saga`: `transaction-service` điều phối các bước fraud check, debit, credit và compensate.
+- `Outbox Pattern`: trạng thái giao dịch và event được ghi vào DB trước khi publish Kafka.
+- `Event-driven`: notification-service và audit-service consume cùng một transfer event từ Kafka.
+- `Idempotency`: Redis lưu `Idempotency-Key` để chặn retry cùng request.
+- `Circuit Breaker`: Resilience4j bảo vệ lời gọi từ transaction-service sang fraud-service và account-service.
+- `Database per Service`: mỗi service sở hữu dữ liệu riêng, không join DB chéo service.
+- `Observability`: actuator, Prometheus metrics, OTLP tracing, correlated logging.
+
+## 4. Observability đã có trong code
+
+Không chỉ dừng ở hạ tầng, observability hiện đã được tích hợp vào service code:
+- `spring-boot-starter-actuator`
+- `micrometer-registry-prometheus`
+- `micrometer-tracing-bridge-otel`
+- `opentelemetry-exporter-otlp`
+- `@Observed` trên các use case chính
+- custom metrics bằng `MeterRegistry`
+- log pattern chứa `traceId`, `spanId`, `requestId`
+
+Một số metric nghiệp vụ hiện có:
+- `banking.auth.register.success`
+- `banking.auth.login.success`
+- `banking.account.create.success`
+- `banking.account.debit.success`
+- `banking.fraud.decisions`
+- `banking.transfer.requests`
+- `banking.transfer.duration`
+- `banking.notification.events`
+- `banking.audit.events`
+
+## 5. Cấu trúc repository
+
+```text
+mini-banking-transfer-system/
+├── frontend/                 # UI web
+├── infra/                    # docker-compose, nginx, kong, kafka, otel, prometheus, grafana...
+├── scripts/                  # script chạy service, seed dữ liệu, smoke test
+├── services/
+│   ├── auth-service/
+│   ├── account-service/
+│   ├── fraud-detection-service/
+│   ├── transaction-service/
+│   ├── notification-service/
+│   └── audit-service/
+├── docs/
+│   ├── analysis-and-design-ddd.md
+│   ├── architecture.md
+│   └── api-specs/
+└── pom.xml
+```
+
+## 6. Cách chạy dự án
+
+### 6.1 Yêu cầu môi trường
+
+- Java 21
+- Maven
+- Docker Desktop / Docker Engine
+- Docker Compose
+
+### 6.2 Chạy hạ tầng dùng profile `core`
+
+Dùng khi cần chạy demo nghiệp vụ chính với cấu hình gọn hơn.
 
 ```powershell
 docker compose -f infra/docker-compose.yml --profile core up -d
 ```
 
-This starts only `kong`, `zookeeper`, `kafka`, `kafka-init`, `redis`, and `postgres`.
+Profile `core` khởi động:
+- `frontend` (Nginx)
+- `kong`
+- `zookeeper`
+- `kafka`
+- `kafka-init`
+- `redis`
+- `postgres`
 
-When you need the full demo stack with observability, use:
+### 6.3 Chạy hạ tầng dùng profile `full`
+
+Dùng khi cần demo observability đầy đủ.
 
 ```powershell
 docker compose -f infra/docker-compose.yml --profile full up -d
 ```
 
-### 2. Start backend services in separate terminals
+Profile `full` bổ sung thêm:
+- `jaeger`
+- `otel-collector`
+- `prometheus`
+- `grafana`
+- `elasticsearch`
+- `kibana`
+- `filebeat`
 
-You can either start all service windows automatically:
+### 6.4 Chạy backend service
+
+Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start-services.ps1
 ```
 
-Or run each command below in its own terminal window:
+Hoặc chạy từng service riêng:
 
 ```powershell
 mvn -q -pl services/auth-service spring-boot:run
@@ -43,222 +157,89 @@ mvn -q -pl services/notification-service spring-boot:run
 mvn -q -pl services/audit-service spring-boot:run
 ```
 
-### 3. Seed demo data
+Linux:
+
+```bash
+./scripts/start-services.sh
+```
+
+### 6.5 Seed dữ liệu demo
+
+Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
 ```
 
-On Linux or Google Cloud VMs, use:
+Linux:
 
 ```bash
 ./scripts/seed-demo-data.sh
 ```
 
-By default the seed script calls:
-- auth via Kong at `http://localhost:8000/api/auth/register`
-- account-service directly at `http://localhost:8082/accounts`
-
-If your local ports are different, override them with `AUTH_BASE_URL` and `ACCOUNT_BASE_URL`.
-The main services now default to PostgreSQL on `localhost:5432`, so auth/account/transaction data survives service restarts and VM redeploys as long as the Postgres volume is preserved.
-
-### 4. Run the smoke test
+### 6.6 Smoke test
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/smoke-auth-transfer.ps1
 ```
 
-By default the smoke test uses Kong at `http://localhost:8000`.
+## 7. Demo flow
 
-### 5. Open the frontend
+1. Khởi động `core` hoặc `full` stack.
+2. Chạy toàn bộ Spring Boot services.
+3. Seed dữ liệu demo.
+4. Mở frontend tại `http://localhost/`.
+5. Đăng nhập bằng tài khoản demo.
+6. Thực hiện một giao dịch chuyển tiền.
+7. Kiểm tra số dư, trạng thái giao dịch và notification ở tài khoản liên quan.
+8. Nếu chạy `full`, kiểm tra metrics, traces và logs.
 
-Open `frontend/index.html` in a browser after the services are running, then log in with:
+### Tài khoản demo
 
-- username: `alice`
-- password: `secret123`
+- `alice / secret123`
+- `bob / secret123`
 
-When deployed on the VM, open the VM public IP on port `80` to access the frontend.
-API endpoints such as `/api/auth/login` are backend routes and are not meant to be opened directly in a browser tab.
+Tài khoản minh họa thường dùng:
+- `alice -> 100001`
+- `bob -> 200001`
 
-## Demo Flow
+## 8. Các endpoint nghiệp vụ chính
 
-1. Start the lighter dev stack with `docker compose -f infra/docker-compose.yml --profile core up -d`.
-2. Start each Spring Boot service from `services/` in its own terminal.
-3. Seed the demo users and accounts with `powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1`.
-4. Run the smoke verification with `powershell -ExecutionPolicy Bypass -File scripts/smoke-auth-transfer.ps1`.
-5. Open the frontend in a browser and use the seeded `alice` account to log in and inspect the transfer result.
-6. Log in as `bob` after a successful transfer from `alice` to confirm the destination account sees the incoming transfer notification.
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/accounts/{accountNumber}`
+- `GET /api/accounts/by-owner/{ownerName}`
+- `POST /api/accounts`
+- `POST /api/transfers`
+- `GET /api/transfers/{transferId}`
+- `GET /api/notifications/account/{accountNumber}`
 
-The demo scripts use the Kong gateway at `http://localhost:8000` by default. The seed script talks to the auth and account services directly, and both scripts allow overriding base URLs with environment variables if the local ports are different.
+Chi tiết đầy đủ xem tại:
+- [analysis-and-design-ddd.md](docs/analysis-and-design-ddd.md)
+- [architecture.md](docs/architecture.md)
+- [docs/api-specs/auth-service.yaml](docs/api-specs/auth-service.yaml)
+- [docs/api-specs/account-service.yaml](docs/api-specs/account-service.yaml)
+- [docs/api-specs/transaction-service.yaml](docs/api-specs/transaction-service.yaml)
+- [docs/api-specs/fraud-detection-service.yaml](docs/api-specs/fraud-detection-service.yaml)
+- [docs/api-specs/notification-service.yaml](docs/api-specs/notification-service.yaml)
+- [docs/api-specs/audit-service.yaml](docs/api-specs/audit-service.yaml)
 
-## Deployment Note
+## 9. URL observability
 
-For deployment on a Google Cloud VM, the same Compose file can be used:
+Khi chạy profile `full`:
+- Frontend: `http://localhost/`
+- Kong Admin: `http://localhost:8001`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Jaeger: `http://localhost:16686`
+- Kibana: `http://localhost:5601`
 
-- use `--profile core` for regular testing and CI smoke checks
-- use `--profile full` only when you need the complete observability demo
+Grafana mặc định:
+- `admin / admin`
 
-This keeps the repository architecture intact while reducing RAM pressure during development.
+### Nên kiểm tra gì
 
-For Linux-based VM hosts, use:
-
-```bash
-./scripts/start-services.sh
-./scripts/stop-services.sh
-./scripts/seed-demo-data.sh
-```
-
-A starter GitHub Actions workflow is available at `.github/workflows/deploy-google-vm.yml`.
-
-## VM Deploy
-
-This project is deployed to a Google Cloud `e2-standard-4` VM.
-
-- VM name: `mini-banking-vm`
-- Zone: `us-central1-a`
-- CI/CD target profile: `core`
-- Demo-only profile: `full`
-
-Required software on the VM:
-
-- Docker Engine
-- `docker-compose`
-- Git
-- Maven
-- Java 21
-
-Manual deploy flow on the VM:
-
-```bash
-git clone https://github.com/HungDung2012/mini-banking-transfer-system.git
-cd mini-banking-transfer-system
-chmod +x scripts/*.sh
-sudo docker-compose -f infra/docker-compose.yml --profile core up -d
-./scripts/start-services.sh
-./scripts/seed-demo-data.sh
-```
-
-GitHub Actions repository configuration:
-
-- Secrets:
-  - `GCP_WORKLOAD_IDENTITY_PROVIDER`
-  - `GCP_SERVICE_ACCOUNT`
-- Variables:
-  - `GCP_PROJECT_ID`
-  - `GCP_COMPUTE_ZONE`
-  - `GCP_VM_NAME`
-
-Workflow behavior:
-
-1. Authenticate to Google Cloud with Workload Identity Federation.
-2. Package the current commit with `git archive`.
-3. Copy the bundle to the VM.
-4. Reset the selected Compose profile on the VM.
-5. Restart backend services on the VM.
-
-Manual workflow options:
-
-- `push` to `main` deploys `core`
-- `Run workflow` lets you choose `core` or `full`
-
-## Demo Checklist
-
-Before the demo:
-
-1. Confirm the latest code is pushed to `main`.
-2. Confirm the deploy workflow has succeeded.
-3. Confirm the VM is running.
-4. Confirm the `core` stack is up.
-5. Confirm backend services are running.
-
-Demo credentials:
-
-- Username: `alice`
-- Password: `secret123`
-- Username: `bob`
-- Password: `secret123`
-
-Notification behavior:
-
-- Incoming transfer notifications are shown for the destination account holder.
-- Example: transfer from `alice` account `100001` to `bob` account `200001`, then log in as `bob` to see the received-money notification.
-- Registering an existing username returns a conflict and should be handled as "username already exists".
-
-Demo commands on Windows:
-
-```powershell
-docker compose -f infra/docker-compose.yml --profile core up -d
-powershell -ExecutionPolicy Bypass -File scripts/start-services.ps1
-powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
-powershell -ExecutionPolicy Bypass -File scripts/smoke-auth-transfer.ps1
-```
-
-Demo commands on Linux / VM:
-
-```bash
-sudo docker-compose -f infra/docker-compose.yml --profile core up -d
-./scripts/start-services.sh
-./scripts/seed-demo-data.sh
-curl http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"secret123"}'
-```
-
-If something fails, check:
-
-1. `docker logs infra_kong_1`
-2. `logs/auth-service.log`
-3. `logs/account-service.log`
-4. `logs/transaction-service.log`
-
-## Observability
-
-Application-level observability is now wired in the services, not just the infra stack.
-
-What is instrumented:
-
-- HTTP request metrics and traces via Spring Boot Actuator + Micrometer Tracing
-- Prometheus scrape endpoints on each service at `/actuator/prometheus`
-- OTLP trace export to the OpenTelemetry Collector
-- correlated logs with `traceId`, `spanId`, and `requestId`
-- business metrics/logs in:
-  - auth register/login
-  - account create/debit/credit
-  - fraud decision evaluation
-  - transfer orchestration and outcome
-  - notification consume
-  - audit consume
-
-To run the full observability stack locally:
-
-```powershell
-docker compose -f infra/docker-compose.yml --profile full up -d
-powershell -ExecutionPolicy Bypass -File scripts/start-services.ps1
-powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
-```
-
-To deploy the full stack on the VM:
-
-1. Open GitHub Actions.
-2. Run `Deploy Google VM`.
-3. Choose `deploy_profile = full`.
-
-Observability URLs on the VM:
-
-- Frontend: `http://<VM_EXTERNAL_IP>/`
-- Kong Admin: `http://<VM_EXTERNAL_IP>:8001`
-- Prometheus: `http://<VM_EXTERNAL_IP>:9090`
-- Grafana: `http://<VM_EXTERNAL_IP>:3000`
-- Jaeger: `http://<VM_EXTERNAL_IP>:16686`
-- Kibana: `http://<VM_EXTERNAL_IP>:5601`
-
-Default demo credentials:
-
-- frontend demo users: `alice / secret123`, `bob / secret123`
-- Grafana: `admin / admin`
-
-What to check in Prometheus:
-
+Prometheus:
 - `http_server_requests_seconds`
 - `banking_auth_register_success_total`
 - `banking_auth_login_success_total`
@@ -268,83 +249,57 @@ What to check in Prometheus:
 - `banking_notification_events_total`
 - `banking_audit_events_total`
 
-What to check in Jaeger:
+Jaeger:
+- xem trace của `transaction-service`
+- đối chiếu outbound call sang `fraud-detection-service` và `account-service`
+- xem trace tiếp tục ở notification-service và audit-service nếu có
 
-- choose service `transaction-service`
-- run a transfer from the frontend
-- inspect the trace to see:
-  - inbound HTTP span on `transaction-service`
-  - outbound calls to `fraud-detection-service`
-  - outbound calls to `account-service`
-  - downstream consume flow in `notification-service` and `audit-service`
+Logs:
+- kiểm tra `traceId`
+- kiểm tra `spanId`
+- kiểm tra `requestId`
+- đối chiếu log của transfer với trace tương ứng
 
-What to check in logs:
+## 10. Kiểm thử hiện có
 
-- each service log line should include:
-  - `traceId`
-  - `spanId`
-  - `requestId`
-- transaction logs should show transfer lifecycle with user/account/amount/status
+Dự án hiện có test cho các phần chính:
+- auth controller
+- account controller
+- transfer saga
+- transfer controller / idempotency / outbox
+- notification consumer
+- audit consumer
+- fraud controller
 
-If Grafana or Jaeger is unreachable on the VM, verify:
+## 11. Một số lưu ý kỹ thuật
 
-1. the workflow was run with `deploy_profile=full`
-2. Google Cloud firewall allows ports `3000`, `9090`, `16686`, and `5601`
-3. `docker ps` on the VM shows `grafana`, `prometheus`, `jaeger`, `otel-collector`
+- `account-service` không đi qua Kong để tránh cấu hình chồng chéo với Nginx.
+- `Idempotency-Key` chỉ chống retry cùng request, không tự động biến hai lần bấm khác nhau thành một giao dịch.
+- `outbox_events` đảm bảo event không bị mất khi Kafka lỗi tạm thời.
+- `notification-service` hiện chỉ tạo thông báo khi event type là `TRANSFER_COMPLETED`.
+- `audit-service` không có business API public, chủ yếu hoạt động như Kafka consumer + actuator endpoint.
 
-1. Đăng ký / đăng nhập
+## 12. Xử lý sự cố nhanh
 
-Frontend gọi /api/auth/register hoặc /api/auth/login.
-Route này đi qua Kong theo infra/kong/kong.yml.
-Trong AuthService.java:
-register() lưu user, rồi gọi kongProvisioningService.ensureConsumer(...), sau đó mới sinh JWT.
-login() kiểm tra mật khẩu đúng, rồi cũng gọi ensureConsumer(...), sau đó sinh JWT.
-Việc provision Kong nằm ở KongProvisioningService.java:
-tạo consumer trong Kong
-tạo JWT secret cho consumer đó
-Điểm rất đáng nói với thầy:
-nếu Kong provisioning lỗi trong lúc đăng ký thì transaction auth bị rollback và trả 503
-điều này được test ở AuthControllerIT.java
-2. Liên kết user với account
+Nếu hệ thống lỗi, kiểm tra theo thứ tự:
 
-Sau khi login, frontend gọi /api/accounts/by-owner/{ownerName} để tìm account number theo username.
-Code nằm ở frontend/app.js, hàm resolveAccountNumberForUser(...).
-Backend hỗ trợ ở AccountController.java với endpoint:
-GET /accounts/by-owner/{ownerName}
-Logic tìm theo owner name ở AccountCommandService.java, method getByOwnerName(...).
-Nếu chưa có account, frontend có thể tạo account mới bằng POST /api/accounts.
-3. Chuyển tiền
+1. `docker ps`
+2. `docker compose -f infra/docker-compose.yml --profile core logs kong`
+3. log của từng service backend
+4. kết nối PostgreSQL / Redis / Kafka
+5. endpoint `/actuator/health` của từng service
+6. Prometheus / Jaeger nếu đang chạy profile `full`
 
-Frontend gửi transfer tới /api/transfers kèm Authorization: Bearer ... và Idempotency-Key.
-Trong frontend/app.js, phần này nằm ở handleTransfer(...).
-Transaction Service vẫn là trung tâm điều phối saga ở TransferApplicationService.java:
-tạo giao dịch PENDING
-gọi fraud
-debit nguồn
-credit đích
-nếu credit lỗi thì compensate
-cập nhật trạng thái cuối
-ghi outbox event
-TransferController ở TransferController.java còn cho thấy nó lấy danh tính user từ header:
-X-User-Id
-hoặc X-Consumer-Username
-Đây là điểm bạn có thể nói: transaction-service đang nhận identity ở tầng gateway/header thay vì tự làm auth đầy đủ bên trong.
-4. Thông báo
+## 13. Lệnh tiện ích
 
-Frontend giờ không poll /api/notifications chung nữa mà poll theo tài khoản:
-/api/notifications/account/{accountNumber}
-Điều này nằm trong frontend/app.js, hàm fetchNotifications().
-Backend query ở NotificationController.java.
-Logic đọc thông báo theo tài khoản nằm ở NotificationQueryService.java và NotificationRepository.java.
-5. Notification được tạo như thế nào
+Kiểm tra reactor Maven:
 
-Ở TransferNotificationConsumer.java:
-nếu event đã xử lý rồi thì bỏ qua
-nếu eventType không phải TRANSFER_COMPLETED thì không tạo notification, chỉ lưu processed marker
-nếu là TRANSFER_COMPLETED thì tạo:
-NotificationEntity.incoming(event)
-NotificationEntity.outgoing(event)
-Nội dung notification nằm ở NotificationEntity.java:
-incoming: “Bạn vừa nhận ...”
-outgoing: “Bạn vừa chuyển ...”
-Test xác nhận hành vi này ở TransferNotificationConsumerTest.java
+```powershell
+mvn -q validate
+```
+
+Dừng service trên Linux:
+
+```bash
+./scripts/stop-services.sh
+```

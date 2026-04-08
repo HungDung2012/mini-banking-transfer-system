@@ -63,6 +63,7 @@ public class TransferApplicationService {
     long startNanos = System.nanoTime();
     log.info("Creating transfer userId={} idempotencyKey={} sourceAccount={} destinationAccount={} amount={}",
         userId, idempotencyKey, request.sourceAccount(), request.destinationAccount(), request.amount());
+        
     String requestFingerprint = fingerprint(request);
     Optional<IdempotencyRecord> existing = idempotencyStore.find(userId, idempotencyKey);
     if (existing.isPresent()) {

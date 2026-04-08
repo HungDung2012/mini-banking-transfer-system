@@ -1,0 +1,94 @@
+﻿openapi: 3.0.3
+info:
+  title: Transaction Service API
+  version: 1.0.0
+  description: API cho luồng chuyển tiền, tra cứu giao dịch và observability endpoint của transaction-service.
+servers:
+  - url: /api
+paths:
+  /transfers:
+    post:
+      summary: Tạo giao dịch chuyển tiền
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferRequest'
+      responses:
+        '200':
+          description: Giao dịch được xử lý
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: Payload không hợp lệ hoặc idempotency conflict
+        '401':
+          description: JWT không hợp lệ
+        '409':
+          description: Xung đột nghiệp vụ
+  /transfers/{transferId}:
+    get:
+      summary: Tra cứu trạng thái giao dịch
+      parameters:
+        - in: path
+          name: transferId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '404':
+          description: Không tìm thấy giao dịch
+  /actuator/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Trạng thái service
+  /actuator/prometheus:
+    get:
+      summary: Export metrics cho Prometheus
+      responses:
+        '200':
+          description: Metrics text format
+components:
+  schemas:
+    CreateTransferRequest:
+      type: object
+      required: [sourceAccount, destinationAccount, amount]
+      properties:
+        sourceAccount:
+          type: string
+        destinationAccount:
+          type: string
+        amount:
+          type: number
+          format: double
+    TransferResponse:
+      type: object
+      properties:
+        transferId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, SUCCESS, FAILED, COMPENSATED, REJECTED]

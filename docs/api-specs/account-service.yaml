@@ -1,0 +1,171 @@
+﻿openapi: 3.0.3
+info:
+  title: Account Service API
+  version: 1.0.0
+  description: API cho quản lý tài khoản, số dư và health/metrics của account-service.
+servers:
+  - url: /api
+paths:
+  /accounts:
+    post:
+      summary: Tạo tài khoản mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          description: Payload không hợp lệ
+        '409':
+          description: Số tài khoản đã tồn tại
+  /accounts/{accountNumber}:
+    get:
+      summary: Lấy thông tin tài khoản theo số tài khoản
+      parameters:
+        - in: path
+          name: accountNumber
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: Không tìm thấy tài khoản
+  /accounts/by-owner/{ownerName}:
+    get:
+      summary: Lấy thông tin tài khoản theo tên chủ tài khoản
+      parameters:
+        - in: path
+          name: ownerName
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: Không tìm thấy tài khoản
+  /accounts/debit:
+    post:
+      summary: Trừ tiền tài khoản
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceCommand'
+      responses:
+        '200':
+          description: Trừ tiền thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: Không tìm thấy tài khoản
+        '409':
+          description: Không đủ số dư
+  /accounts/credit:
+    post:
+      summary: Cộng tiền tài khoản
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceCommand'
+      responses:
+        '200':
+          description: Cộng tiền thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: Không tìm thấy tài khoản
+  /accounts/compensate:
+    post:
+      summary: Hoàn tiền bù trừ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceCommand'
+      responses:
+        '200':
+          description: Hoàn tiền thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: Không tìm thấy tài khoản
+  /actuator/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Trạng thái service
+  /actuator/prometheus:
+    get:
+      summary: Export metrics cho Prometheus
+      responses:
+        '200':
+          description: Metrics text format
+components:
+  schemas:
+    CreateAccountRequest:
+      type: object
+      required: [accountNumber, ownerName, balance]
+      properties:
+        accountNumber:
+          type: string
+        ownerName:
+          type: string
+        balance:
+          type: number
+          format: double
+          minimum: 0
+    BalanceCommand:
+      type: object
+      required: [accountNumber, amount]
+      properties:
+        accountNumber:
+          type: string
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+    AccountResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountNumber:
+          type: string
+        ownerName:
+          type: string
+        balance:
+          type: number
+          format: double
+        status:
+          type: string

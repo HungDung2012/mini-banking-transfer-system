@@ -1,0 +1,80 @@
+﻿openapi: 3.0.3
+info:
+  title: Auth Service API
+  version: 1.0.0
+  description: API cho đăng ký, đăng nhập và health/metrics của auth-service.
+servers:
+  - url: /api
+paths:
+  /auth/register:
+    post:
+      summary: Đăng ký người dùng mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '201':
+          description: Đăng ký thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Payload không hợp lệ
+        '409':
+          description: Username đã tồn tại
+        '503':
+          description: Lỗi đồng bộ consumer vào Kong
+  /auth/login:
+    post:
+      summary: Đăng nhập
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Payload không hợp lệ
+        '401':
+          description: Sai thông tin đăng nhập
+        '503':
+          description: Lỗi đồng bộ consumer vào Kong
+  /actuator/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Trạng thái service
+  /actuator/prometheus:
+    get:
+      summary: Export metrics cho Prometheus
+      responses:
+        '200':
+          description: Metrics text format
+components:
+  schemas:
+    AuthRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
