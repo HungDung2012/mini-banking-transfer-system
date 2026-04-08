@@ -11,8 +11,9 @@ public class FraudClient {
 
   private final RestClient restClient;
 
-  public FraudClient(@Value("${integration.fraud-service.base-url:http://localhost:8083}") String baseUrl) {
-    this.restClient = RestClient.builder()
+  public FraudClient(RestClient.Builder restClientBuilder,
+      @Value("${integration.fraud-service.base-url:http://localhost:8083}") String baseUrl) {
+    this.restClient = restClientBuilder
         .baseUrl(baseUrl)
         .build();
   }

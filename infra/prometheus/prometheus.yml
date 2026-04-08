@@ -11,3 +11,39 @@ scrape_configs:
     static_configs:
       - targets:
           - otel-collector:9464
+
+  - job_name: auth-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 172.30.0.1:8081
+
+  - job_name: account-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 172.30.0.1:8082
+
+  - job_name: fraud-detection-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 172.30.0.1:8083
+
+  - job_name: transaction-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 172.30.0.1:8084
+
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 172.30.0.1:8085
+
+  - job_name: audit-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 172.30.0.1:8086

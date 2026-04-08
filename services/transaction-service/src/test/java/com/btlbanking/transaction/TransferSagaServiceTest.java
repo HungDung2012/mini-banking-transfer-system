@@ -18,6 +18,7 @@ import com.btlbanking.transaction.outbox.OutboxPublisher;
 import com.btlbanking.transaction.service.TransferApplicationService;
 import com.btlbanking.transaction.web.CreateTransferRequest;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -70,7 +71,8 @@ class TransferSagaServiceTest {
         registry.circuitBreaker("fraud-client"),
         registry.circuitBreaker("account-client"),
         idempotencyStore,
-        outboxPublisher);
+        outboxPublisher,
+        new SimpleMeterRegistry());
   }
 
   @Test

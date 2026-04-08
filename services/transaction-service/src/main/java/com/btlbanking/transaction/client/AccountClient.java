@@ -11,8 +11,9 @@ public class AccountClient {
 
   private final RestClient restClient;
 
-  public AccountClient(@Value("${integration.account-service.base-url:http://localhost:8082}") String baseUrl) {
-    this.restClient = RestClient.builder()
+  public AccountClient(RestClient.Builder restClientBuilder,
+      @Value("${integration.account-service.base-url:http://localhost:8082}") String baseUrl) {
+    this.restClient = restClientBuilder
         .baseUrl(baseUrl)
         .build();
   }

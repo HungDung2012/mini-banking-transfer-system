@@ -13,9 +13,15 @@ import com.btlbanking.transaction.outbox.OutboxPublisher;
 import com.btlbanking.transaction.web.CreateTransferRequest;
 import com.btlbanking.transaction.web.TransferResponse;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.observation.annotation.Observed;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class TransferApplicationService {
+  private static final Logger log = LoggerFactory.getLogger(TransferApplicationService.class);
 
   private final TransferRepository repository;
   private final FraudClient fraudClient;
@@ -31,6 +38,7 @@ public class TransferApplicationService {
   private final CircuitBreaker accountCircuitBreaker;
   private final IdempotencyStore idempotencyStore;
   private final OutboxPublisher outboxPublisher;
+  private final MeterRegistry meterRegistry;
 
   public TransferApplicationService(TransferRepository repository,
       FraudClient fraudClient,
@@ -38,7 +46,8 @@ public class TransferApplicationService {
       @Qualifier("fraudCircuitBreaker") CircuitBreaker fraudCircuitBreaker,
       @Qualifier("accountCircuitBreaker") CircuitBreaker accountCircuitBreaker,
       IdempotencyStore idempotencyStore,
-      OutboxPublisher outboxPublisher) {
+      OutboxPublisher outboxPublisher,
+      MeterRegistry meterRegistry) {
     this.repository = repository;
     this.fraudClient = fraudClient;
     this.accountClient = accountClient;
@@ -46,18 +55,26 @@ public class TransferApplicationService {
     this.accountCircuitBreaker = accountCircuitBreaker;
     this.idempotencyStore = idempotencyStore;
     this.outboxPublisher = outboxPublisher;
+    this.meterRegistry = meterRegistry;
   }
 
+  @Observed(name = "banking.transfer.create", contextualName = "transfer-create")
   public TransferResponse create(String userId, String idempotencyKey, CreateTransferRequest request) {
+    long startNanos = System.nanoTime();
+    log.info("Creating transfer userId={} idempotencyKey={} sourceAccount={} destinationAccount={} amount={}",
+        userId, idempotencyKey, request.sourceAccount(), request.destinationAccount(), request.amount());
     String requestFingerprint = fingerprint(request);
     Optional<IdempotencyRecord> existing = idempotencyStore.find(userId, idempotencyKey);
     if (existing.isPresent()) {
       IdempotencyRecord record = existing.get();
       if (!record.matches(userId, idempotencyKey, requestFingerprint)) {
+        meterRegistry.counter("banking.transfer.requests", "result", "IDEMPOTENCY_CONFLICT").increment();
         throw new IllegalArgumentException("Idempotency key reused with a different request payload");
       }
       TransferEntity transfer = repository.findById(record.transferId())
           .orElseThrow(() -> new IllegalStateException("Missing transfer for idempotency record"));
+      meterRegistry.counter("banking.transfer.requests", "result", "IDEMPOTENT_REPLAY").increment();
+      recordTransferDuration(startNanos, "IDEMPOTENT_REPLAY");
       return toResponse(transfer);
     }
 
@@ -111,10 +128,15 @@ public class TransferApplicationService {
     entity.setStatus(finalStatus);
     entity = repository.save(entity);
     outboxPublisher.record(TransferEvent.from(entity));
+    meterRegistry.counter("banking.transfer.requests", "result", finalStatus.name()).increment();
+    recordTransferDuration(startNanos, finalStatus.name());
+    log.info("Completed transfer transferId={} status={} userId={} sourceAccount={} destinationAccount={} amount={}",
+        entity.getId(), finalStatus, userId, request.sourceAccount(), request.destinationAccount(), request.amount());
     return toResponse(entity);
   }
 
   @Transactional(readOnly = true)
+  @Observed(name = "banking.transfer.get", contextualName = "transfer-get")
   public TransferResponse get(UUID transferId) {
     TransferEntity entity = repository.findById(transferId)
         .orElseThrow(() -> new TransferNotFoundException("Transfer not found: " + transferId));
@@ -132,5 +154,12 @@ public class TransferApplicationService {
   private String fingerprint(CreateTransferRequest request) {
     return request.sourceAccount() + "|" + request.destinationAccount() + "|"
         + request.amount().stripTrailingZeros().toPlainString();
+  }
+
+  private void recordTransferDuration(long startNanos, String result) {
+    Timer.builder("banking.transfer.duration")
+        .tag("result", result)
+        .register(meterRegistry)
+        .record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
   }
 }
