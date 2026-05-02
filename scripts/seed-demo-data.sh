@@ -27,7 +27,7 @@ post_json() {
 
 post_json "$AUTH_BASE_URL/api/auth/register" '{"username":"alice","password":"secret123"}'
 post_json "$AUTH_BASE_URL/api/auth/register" '{"username":"bob","password":"secret123"}'
-post_json "$ACCOUNT_BASE_URL/accounts" '{"accountNumber":"100001","ownerName":"Alice","balance":1000000}'
+post_json "$ACCOUNT_BASE_URL/accounts" '{"accountNumber":"100001","ownerName":"Alice","balance":1000000000}'
 post_json "$ACCOUNT_BASE_URL/accounts" '{"accountNumber":"200001","ownerName":"Bob","balance":500000}'
 
 echo "Demo data seeded."

@@ -22,7 +22,7 @@ fi
 
 find_service_pids() {
   local module="$1"
-  pgrep -f -- "-Dmaven.multiModuleProjectDirectory=$ROOT_DIR .* -pl $module spring-boot:run" || true
+  pgrep -f -- "-f $ROOT_DIR/$module/pom.xml .* spring-boot:run" || true
 }
 
 for pid_file in "$PID_DIR"/*.pid; do

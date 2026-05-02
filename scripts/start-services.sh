@@ -6,6 +6,7 @@ LOG_DIR="$ROOT_DIR/logs"
 PID_DIR="$ROOT_DIR/.run"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
+cd "$ROOT_DIR"
 
 services=(
   "auth-service:services/auth-service"
@@ -18,7 +19,7 @@ services=(
 
 find_service_pids() {
   local module="$1"
-  pgrep -f -- "-Dmaven.multiModuleProjectDirectory=$ROOT_DIR .* -pl $module spring-boot:run" || true
+  pgrep -f -- "-f $ROOT_DIR/$module/pom.xml .* spring-boot:run" || true
 }
 
 for entry in "${services[@]}"; do
@@ -35,7 +36,7 @@ for entry in "${services[@]}"; do
   fi
 
   echo "Starting $name"
-  nohup mvn -q -pl "$module" spring-boot:run >"$log_file" 2>&1 &
+  nohup mvn -q -f "$ROOT_DIR/$module/pom.xml" spring-boot:run >"$log_file" 2>&1 &
   echo $! >"$pid_file"
 done
 

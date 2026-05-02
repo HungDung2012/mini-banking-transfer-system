@@ -33,7 +33,7 @@ function Invoke-SeedRequest {
 
 Invoke-SeedRequest -Method Post -Uri "$authBaseUrl/api/auth/register" -Body '{"username":"alice","password":"secret123"}'
 Invoke-SeedRequest -Method Post -Uri "$authBaseUrl/api/auth/register" -Body '{"username":"bob","password":"secret123"}'
-Invoke-SeedRequest -Method Post -Uri "$accountBaseUrl/accounts" -Body '{"accountNumber":"100001","ownerName":"Alice","balance":1000000}'
+Invoke-SeedRequest -Method Post -Uri "$accountBaseUrl/accounts" -Body '{"accountNumber":"100001","ownerName":"Alice","balance":1000000000}'
 Invoke-SeedRequest -Method Post -Uri "$accountBaseUrl/accounts" -Body '{"accountNumber":"200001","ownerName":"Bob","balance":500000}'
 
 Write-Host 'Demo data seeded.'

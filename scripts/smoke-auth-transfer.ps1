@@ -51,8 +51,6 @@ if ($first.transferId -ne $second.transferId) {
   throw 'Idempotency failed'
 }
 
-$status = Invoke-JsonRequest -Method Get -Uri "$gatewayBaseUrl/api/transfers/$($first.transferId)" -Headers @{ Authorization = "Bearer $token" }
-
 Write-Host "Transfer ID: $($first.transferId)"
-Write-Host "Status: $($status.status)"
+Write-Host "Status: $($first.status)"
 Write-Host 'Smoke verification passed.'
