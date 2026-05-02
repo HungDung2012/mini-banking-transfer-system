@@ -8,11 +8,6 @@ Hệ thống mô phỏng chuyển tiền nội bộ cho ngân hàng số theo ki
 
 > Cập nhật lại bảng này theo thông tin nhóm của bạn trước khi nộp bài.
 
-| Họ tên | MSSV | Vai trò |
-| --- | --- | --- |
-| Nguyễn Tuấn Anh | B22DCVT026 | Phân tích, backend, frontend |
-| Chu Hưng Dũng | B22DCCN123 | Phân tích, backend |
-
 ## Phạm vi nghiệp vụ
 
 - Đăng ký và đăng nhập người dùng bằng JWT.
