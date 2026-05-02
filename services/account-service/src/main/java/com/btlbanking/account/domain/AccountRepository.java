@@ -10,5 +10,7 @@ public interface AccountRepository extends JpaRepository<AccountEntity, UUID> {
 
   Optional<AccountEntity> findFirstByOwnerNameIgnoreCase(String ownerName);
 
+  Optional<AccountEntity> findTopByOrderByAccountNumberDesc();
+
   boolean existsByAccountNumber(String accountNumber);
 }

@@ -20,6 +20,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Transactional
 public class AccountCommandService {
   private static final Logger log = LoggerFactory.getLogger(AccountCommandService.class);
+  private static final BigDecimal OPENING_BALANCE = new BigDecimal("1000000");
+  private static final int ACCOUNT_NUMBER_SEED = 100000;
 
   private final AccountRepository repository;
   private final MeterRegistry meterRegistry;
@@ -30,16 +32,11 @@ public class AccountCommandService {
   }
 
   @Observed(name = "banking.account.create", contextualName = "account-create")
-  public AccountResponse create(CreateAccountRequest request) {
-    if (repository.existsByAccountNumber(request.accountNumber())) {
-      meterRegistry.counter("banking.account.create.failures", "reason", "duplicate-account").increment();
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "Account number already exists");
-    }
-
+  public synchronized AccountResponse create(CreateAccountRequest request) {
     AccountEntity account = new AccountEntity();
-    account.setAccountNumber(request.accountNumber());
+    account.setAccountNumber(nextAccountNumber());
     account.setOwnerName(request.ownerName());
-    account.setBalance(request.balance());
+    account.setBalance(OPENING_BALANCE);
     account.setStatus(AccountStatus.ACTIVE);
     AccountResponse response = AccountResponse.from(repository.save(account));
     meterRegistry.counter("banking.account.create.success").increment();
@@ -96,5 +93,22 @@ public class AccountCommandService {
   private AccountEntity findByAccountNumber(String accountNumber) {
     return repository.findByAccountNumber(accountNumber)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
+  }
+
+  private String nextAccountNumber() {
+    int candidate = repository.findTopByOrderByAccountNumberDesc()
+        .map(AccountEntity::getAccountNumber)
+        .map(Integer::parseInt)
+        .orElse(ACCOUNT_NUMBER_SEED) + 1;
+
+    while (repository.existsByAccountNumber(formatAccountNumber(candidate))) {
+      candidate++;
+    }
+
+    return formatAccountNumber(candidate);
+  }
+
+  private String formatAccountNumber(int accountNumber) {
+    return String.format("%06d", accountNumber);
   }
 }

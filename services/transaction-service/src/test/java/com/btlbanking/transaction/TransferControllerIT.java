@@ -1,17 +1,13 @@
 package com.btlbanking.transaction;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.btlbanking.transaction.client.AccountClient;
 import com.btlbanking.transaction.client.FraudCheckResponse;
 import com.btlbanking.transaction.client.FraudClient;
-import com.jayway.jsonpath.JsonPath;
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +52,7 @@ class TransferControllerIT {
   }
 
   @Test
-  void create_transfer_persists_and_get_by_id_returns_final_status() throws Exception {
+  void create_transfer_returns_final_status() throws Exception {
     org.mockito.Mockito.when(fraudClient.check(org.mockito.ArgumentMatchers.any()))
         .thenReturn(new FraudCheckResponse("APPROVED", "OK"));
     org.mockito.Mockito.doNothing().when(accountClient)
@@ -72,18 +68,6 @@ class TransferControllerIT {
                 "\"sourceAccount\":\"100001\"," +
                 "\"destinationAccount\":\"200001\"," +
                 "\"amount\":500}"))
-        .andExpect(status().isOk())
-        .andReturn();
-
-    var transferId = JsonPath.read(result.getResponse().getContentAsString(), "$.transferId");
-    mockMvc.perform(get("/transfers/{id}", transferId))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
-  }
-
-  @Test
-  void get_missing_transfer_returns_404() throws Exception {
-    mockMvc.perform(get("/transfers/{id}", UUID.randomUUID()))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isOk());
   }
 }

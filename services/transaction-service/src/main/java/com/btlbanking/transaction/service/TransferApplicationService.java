@@ -17,7 +17,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.observation.annotation.Observed;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -133,14 +132,6 @@ public class TransferApplicationService {
     recordTransferDuration(startNanos, finalStatus.name());
     log.info("Completed transfer transferId={} status={} userId={} sourceAccount={} destinationAccount={} amount={}",
         entity.getId(), finalStatus, userId, request.sourceAccount(), request.destinationAccount(), request.amount());
-    return toResponse(entity);
-  }
-
-  @Transactional(readOnly = true)
-  @Observed(name = "banking.transfer.get", contextualName = "transfer-get")
-  public TransferResponse get(UUID transferId) {
-    TransferEntity entity = repository.findById(transferId)
-        .orElseThrow(() -> new TransferNotFoundException("Transfer not found: " + transferId));
     return toResponse(entity);
   }
 
