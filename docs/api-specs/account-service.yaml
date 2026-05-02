@@ -1,10 +1,10 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: Account Service API
   version: 1.0.0
   description: API cho quản lý tài khoản, số dư và health/metrics của account-service.
 servers:
-  - url: /api
+  - url: /
 paths:
   /accounts:
     post:

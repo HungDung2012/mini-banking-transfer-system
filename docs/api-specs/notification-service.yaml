@@ -1,32 +1,14 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: Notification Service API
   version: 1.0.0
   description: API truy vấn thông báo và observability endpoint của notification-service.
 servers:
-  - url: /api
+  - url: /
 paths:
   /notifications/account/{accountNumber}:
     get:
       summary: Lấy danh sách thông báo theo tài khoản
-      parameters:
-        - in: path
-          name: accountNumber
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Thành công
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/NotificationResponse'
-  /notifications/recipient/{accountNumber}:
-    get:
-      summary: Alias lấy danh sách thông báo theo tài khoản nhận
       parameters:
         - in: path
           name: accountNumber

@@ -1,305 +1,204 @@
-﻿# Mini Banking Transfer System
+# Mini Banking Transfer System
 
-Hệ thống mô phỏng quy trình chuyển tiền nội bộ theo kiến trúc microservices. Dự án tập trung vào các vấn đề kỹ thuật thường gặp trong hệ phân tán: xác thực qua gateway, orchestration saga, idempotency, outbox pattern, event-driven communication và observability.
+Hệ thống mô phỏng chuyển tiền nội bộ cho ngân hàng số theo kiến trúc microservices. Ứng dụng hỗ trợ đăng ký và đăng nhập người dùng, tạo tài khoản thanh toán, kiểm tra gian lận giao dịch, chuyển tiền có idempotency, phát thông báo sau giao dịch và lưu audit trail.
 
-## 1. Mục tiêu dự án
+> `README.md` này mô tả hiện trạng thực tế của repo. Hạ tầng chạy bằng Docker Compose trong `infra/`, còn các Spring Boot service được chạy local bằng Maven.
 
-Phạm vi nghiệp vụ chính:
-- đăng ký và đăng nhập người dùng
-- chuyển tiền giữa hai tài khoản trong cùng hệ thống
-- kiểm tra gian lận trước khi xử lý giao dịch
-- ghi nhận trạng thái giao dịch và cơ chế bù trừ khi có lỗi
-- tạo notification cho người gửi và người nhận
-- lưu audit trail cho các transfer event
-- theo dõi metrics, traces và logs của toàn hệ thống
+## Thành viên nhóm
 
-## 2. Kiến trúc tổng quan
+> Cập nhật lại bảng này theo thông tin nhóm của bạn trước khi nộp bài.
 
-Các thành phần chính:
-- `frontend/`: giao diện web tĩnh dùng HTML/CSS/JavaScript
-- `infra/nginx`: serve frontend và reverse proxy cho `/api/*`
-- `infra/kong`: API Gateway cho `auth` và `transfer`, kiểm tra JWT cho API chuyển tiền
-- `services/auth-service`: đăng ký, đăng nhập, sinh JWT, đồng bộ consumer/JWT credential vào Kong
-- `services/account-service`: tạo tài khoản, tra cứu tài khoản, debit, credit, compensate
-- `services/fraud-detection-service`: kiểm tra các luật chống gian lận đơn giản
-- `services/transaction-service`: điều phối saga chuyển tiền, idempotency, outbox, Kafka publish
-- `services/notification-service`: consume transfer event và tạo thông báo incoming/outgoing
-- `services/audit-service`: consume transfer event và lưu audit record
-- `PostgreSQL`: lưu dữ liệu nghiệp vụ
-- `Redis`: lưu `Idempotency-Key`
-- `Kafka`: truyền transfer event giữa transaction-service và các consumer
-- `Prometheus`, `Grafana`, `Jaeger`, `OpenTelemetry Collector`, `Elasticsearch`, `Kibana`, `Filebeat`: stack observability
+| Họ tên | MSSV | Vai trò |
+| --- | --- | --- |
+| Nguyễn Tuấn Anh | B22DCVT026 | Phân tích, backend, frontend |
+| Chu Hưng Dũng | B22DCCN123 | Phân tích, backend |
 
-### Routing thực tế
+## Phạm vi nghiệp vụ
 
-- `Frontend -> Nginx -> Kong -> auth-service`
-- `Frontend -> Nginx -> Kong -> transaction-service`
-- `Frontend -> Nginx -> account-service`
-- `Frontend -> Nginx -> notification-service`
+- Đăng ký và đăng nhập người dùng bằng JWT.
+- Tạo và truy vấn tài khoản ngân hàng nội bộ.
+- Gửi yêu cầu chuyển tiền giữa hai tài khoản.
+- Kiểm tra chống gian lận trước khi ghi nhận giao dịch.
+- Trừ tiền, cộng tiền và tự động bù trừ khi bước xử lý sau bị lỗi.
+- Phát sự kiện giao dịch để notification-service và audit-service xử lý độc lập.
+- Thu thập metrics, traces và correlated logs cho toàn hệ thống.
 
-Nghĩa là:
-- `auth` và `transfer` đi qua Kong
-- `account` và `notification` được Nginx route trực tiếp
+## Kiến trúc tổng quan
 
-## 3. Các pattern đã áp dụng
-
-- `API Gateway`: Kong được dùng để route auth/transfer và kiểm tra JWT cho API chuyển tiền.
-- `Saga`: `transaction-service` điều phối các bước fraud check, debit, credit và compensate.
-- `Outbox Pattern`: trạng thái giao dịch và event được ghi vào DB trước khi publish Kafka.
-- `Event-driven`: notification-service và audit-service consume cùng một transfer event từ Kafka.
-- `Idempotency`: Redis lưu `Idempotency-Key` để chặn retry cùng request.
-- `Circuit Breaker`: Resilience4j bảo vệ lời gọi từ transaction-service sang fraud-service và account-service.
-- `Database per Service`: mỗi service sở hữu dữ liệu riêng, không join DB chéo service.
-- `Observability`: actuator, Prometheus metrics, OTLP tracing, correlated logging.
-
-## 4. Observability đã có trong code
-
-Không chỉ dừng ở hạ tầng, observability hiện đã được tích hợp vào service code:
-- `spring-boot-starter-actuator`
-- `micrometer-registry-prometheus`
-- `micrometer-tracing-bridge-otel`
-- `opentelemetry-exporter-otlp`
-- `@Observed` trên các use case chính
-- custom metrics bằng `MeterRegistry`
-- log pattern chứa `traceId`, `spanId`, `requestId`
-
-Một số metric nghiệp vụ hiện có:
-- `banking.auth.register.success`
-- `banking.auth.login.success`
-- `banking.account.create.success`
-- `banking.account.debit.success`
-- `banking.fraud.decisions`
-- `banking.transfer.requests`
-- `banking.transfer.duration`
-- `banking.notification.events`
-- `banking.audit.events`
-
-## 5. Cấu trúc repository
-
-```text
-mini-banking-transfer-system/
-├── frontend/                 # UI web
-├── infra/                    # docker-compose, nginx, kong, kafka, otel, prometheus, grafana...
-├── scripts/                  # script chạy service, seed dữ liệu, smoke test
-├── services/
-│   ├── auth-service/
-│   ├── account-service/
-│   ├── fraud-detection-service/
-│   ├── transaction-service/
-│   ├── notification-service/
-│   └── audit-service/
-├── docs/
-│   ├── analysis-and-design-ddd.md
-│   ├── architecture.md
-│   └── api-specs/
-└── pom.xml
+```mermaid
+graph LR
+    U[User] --> FE[Frontend + Nginx :80]
+    FE -->|/api/auth, /api/transfers| KG[Kong Gateway :8000]
+    FE -->|/api/accounts| ACC[Account Service :8082]
+    FE -->|/api/notifications| NOTI[Notification Service :8085]
+    KG --> AUTH[Auth Service :8081]
+    KG --> TX[Transaction Service :8084]
+    TX --> FR[Fraud Detection Service :8083]
+    TX --> ACC
+    TX -->|transfer-events| KAFKA[Kafka :29092]
+    KAFKA --> NOTI
+    KAFKA --> AUD[Audit Service :8086]
+    AUTH --> PG[(PostgreSQL)]
+    ACC --> PG
+    TX --> PG
+    TX --> REDIS[(Redis)]
+    NOTI --> PG
+    AUD --> PG
 ```
 
-## 6. Cách chạy dự án
+## Thành phần chính
 
-### 6.1 Yêu cầu môi trường
+| Thành phần | Cổng | Vai trò |
+| --- | --- | --- |
+| Frontend + Nginx | `80` | Giao diện người dùng, proxy `/api/accounts` và `/api/notifications` |
+| Kong Gateway | `8000` | Entry point cho auth và transfer API |
+| Kong Admin API | `8001` | Bootstrap route và consumer JWT |
+| Auth Service | `8081` | Đăng ký, đăng nhập, sinh JWT, provision consumer trên Kong |
+| Account Service | `8082` | Tạo tài khoản, truy vấn số dư, debit, credit, compensate |
+| Fraud Detection Service | `8083` | Đánh giá giao dịch theo rule chống gian lận |
+| Transaction Service | `8084` | Điều phối luồng chuyển tiền, idempotency, outbox, compensation |
+| Notification Service | `8085` | Nhận event Kafka và lưu thông báo cho tài khoản |
+| Audit Service | `8086` | Nhận event Kafka và ghi nhận audit bất biến |
+| PostgreSQL | `5432` | Lưu dữ liệu cho auth, account, transaction, notification, audit và Kong |
+| Redis | `6379` | Lưu idempotency record cho transaction-service |
+| Kafka | `29092` | Phát và tiêu thụ sự kiện `transfer-events` |
 
-- Java 21
-- Maven
-- Docker Desktop / Docker Engine
-- Docker Compose
+### Observability profile
 
-### 6.2 Chạy hạ tầng dùng profile `core`
+Khi chạy profile `full`, hệ thống bật thêm:
 
-Dùng khi cần chạy demo nghiệp vụ chính với cấu hình gọn hơn.
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Jaeger: `http://localhost:16686`
+- Elasticsearch: `http://localhost:9200`
+- Kibana: `http://localhost:5601`
+- OTEL Collector: `4317`, `4318`, `9464`
+
+## Công nghệ sử dụng
+
+- Java `21`, Maven, Spring Boot `3.3.5`
+- Spring Web, Spring Data JPA, Spring Security, Spring Kafka, Actuator
+- Resilience4j cho circuit breaker ở transaction-service
+- PostgreSQL, Redis, Kafka, Kong Gateway
+- OpenTelemetry, Prometheus, Grafana, Jaeger, Elasticsearch, Kibana
+- Frontend tĩnh bằng HTML, CSS, JavaScript
+
+## Chạy hệ thống local
+
+### Yêu cầu
+
+- Java `21`
+- Maven `3.9+`
+- Docker Desktop
+- PowerShell hoặc Bash
+
+### 1. Khởi động hạ tầng
+
+Chạy profile `core` nếu chỉ cần môi trường chính:
 
 ```powershell
 docker compose -f infra/docker-compose.yml --profile core up -d
 ```
 
-Profile `core` khởi động:
-- `frontend` (Nginx)
-- `kong`
-- `zookeeper`
-- `kafka`
-- `kafka-init`
-- `redis`
-- `postgres`
-
-### 6.3 Chạy hạ tầng dùng profile `full`
-
-Dùng khi cần demo observability đầy đủ.
+Chạy profile `full` nếu cần observability:
 
 ```powershell
 docker compose -f infra/docker-compose.yml --profile full up -d
 ```
 
-Profile `full` bổ sung thêm:
-- `jaeger`
-- `otel-collector`
-- `prometheus`
-- `grafana`
-- `elasticsearch`
-- `kibana`
-- `filebeat`
+### 2. Khởi động các Spring Boot service
 
-### 6.4 Chạy backend service
-
-Windows:
+Trên Windows PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/start-services.ps1
+.\scripts\start-services.ps1
 ```
 
-Hoặc chạy từng service riêng:
-
-```powershell
-mvn -q -pl services/auth-service spring-boot:run
-mvn -q -pl services/account-service spring-boot:run
-mvn -q -pl services/fraud-detection-service spring-boot:run
-mvn -q -pl services/transaction-service spring-boot:run
-mvn -q -pl services/notification-service spring-boot:run
-mvn -q -pl services/audit-service spring-boot:run
-```
-
-Linux:
+Trên Bash:
 
 ```bash
-./scripts/start-services.sh
+bash ./scripts/start-services.sh
 ```
 
-### 6.5 Seed dữ liệu demo
+> Lưu ý: `Kong` và `Nginx` trong `infra/` đang gọi các service local qua các cổng host `8081`, `8082`, `8084`, `8085`. Vì vậy các backend service phải chạy trên máy host trước khi frontend và gateway hoạt động đầy đủ.
 
-Windows:
+### 3. Nạp dữ liệu demo
+
+PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/seed-demo-data.ps1
+.\scripts\seed-demo-data.ps1
 ```
 
-Linux:
+Bash:
 
 ```bash
-./scripts/seed-demo-data.sh
+bash ./scripts/seed-demo-data.sh
 ```
 
-### 6.6 Smoke test
+Script seed tạo sẵn hai người dùng demo:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/smoke-auth-transfer.ps1
-```
+| Username | Password | Account | Số dư khởi tạo |
+| --- | --- | --- | --- |
+| `alice` | `secret123` | `100001` | `1,000,000,000` |
+| `bob` | `secret123` | `200001` | `500,000` |
 
-## 7. Demo flow
+### 4. Mở ứng dụng
 
-1. Khởi động `core` hoặc `full` stack.
-2. Chạy toàn bộ Spring Boot services.
-3. Seed dữ liệu demo.
-4. Mở frontend tại `http://localhost/`.
-5. Đăng nhập bằng tài khoản demo.
-6. Thực hiện một giao dịch chuyển tiền.
-7. Kiểm tra số dư, trạng thái giao dịch và notification ở tài khoản liên quan.
-8. Nếu chạy `full`, kiểm tra metrics, traces và logs.
-
-### Tài khoản demo
-
-- `alice / secret123`
-- `bob / secret123`
-
-Tài khoản minh họa thường dùng:
-- `alice -> 100001`
-- `bob -> 200001`
-
-## 8. Các endpoint nghiệp vụ chính
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/accounts/{accountNumber}`
-- `GET /api/accounts/by-owner/{ownerName}`
-- `POST /api/accounts`
-- `POST /api/transfers`
-- `GET /api/transfers/{transferId}`
-- `GET /api/notifications/account/{accountNumber}`
-
-Chi tiết đầy đủ xem tại:
-- [analysis-and-design-ddd.md](docs/analysis-and-design-ddd.md)
-- [architecture.md](docs/architecture.md)
-- [docs/api-specs/auth-service.yaml](docs/api-specs/auth-service.yaml)
-- [docs/api-specs/account-service.yaml](docs/api-specs/account-service.yaml)
-- [docs/api-specs/transaction-service.yaml](docs/api-specs/transaction-service.yaml)
-- [docs/api-specs/fraud-detection-service.yaml](docs/api-specs/fraud-detection-service.yaml)
-- [docs/api-specs/notification-service.yaml](docs/api-specs/notification-service.yaml)
-- [docs/api-specs/audit-service.yaml](docs/api-specs/audit-service.yaml)
-
-## 9. URL observability
-
-Khi chạy profile `full`:
-- Frontend: `http://localhost/`
+- Frontend: `http://localhost`
+- Gateway proxy: `http://localhost:8000`
 - Kong Admin: `http://localhost:8001`
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000`
-- Jaeger: `http://localhost:16686`
-- Kibana: `http://localhost:5601`
 
-Grafana mặc định:
-- `admin / admin`
+## Kiểm tra nhanh
 
-### Nên kiểm tra gì
-
-Prometheus:
-- `http_server_requests_seconds`
-- `banking_auth_register_success_total`
-- `banking_auth_login_success_total`
-- `banking_transfer_requests_total`
-- `banking_transfer_duration`
-- `banking_fraud_decisions_total`
-- `banking_notification_events_total`
-- `banking_audit_events_total`
-
-Jaeger:
-- xem trace của `transaction-service`
-- đối chiếu outbound call sang `fraud-detection-service` và `account-service`
-- xem trace tiếp tục ở notification-service và audit-service nếu có
-
-Logs:
-- kiểm tra `traceId`
-- kiểm tra `spanId`
-- kiểm tra `requestId`
-- đối chiếu log của transfer với trace tương ứng
-
-## 10. Kiểm thử hiện có
-
-Dự án hiện có test cho các phần chính:
-- auth controller
-- account controller
-- transfer saga
-- transfer controller / idempotency / outbox
-- notification consumer
-- audit consumer
-- fraud controller
-
-## 11. Một số lưu ý kỹ thuật
-
-- `account-service` không đi qua Kong để tránh cấu hình chồng chéo với Nginx.
-- `Idempotency-Key` chỉ chống retry cùng request, không tự động biến hai lần bấm khác nhau thành một giao dịch.
-- `outbox_events` đảm bảo event không bị mất khi Kafka lỗi tạm thời.
-- `notification-service` hiện chỉ tạo thông báo khi event type là `TRANSFER_COMPLETED`.
-- `audit-service` không có business API public, chủ yếu hoạt động như Kafka consumer + actuator endpoint.
-
-## 12. Xử lý sự cố nhanh
-
-Nếu hệ thống lỗi, kiểm tra theo thứ tự:
-
-1. `docker ps`
-2. `docker compose -f infra/docker-compose.yml --profile core logs kong`
-3. log của từng service backend
-4. kết nối PostgreSQL / Redis / Kafka
-5. endpoint `/actuator/health` của từng service
-6. Prometheus / Jaeger nếu đang chạy profile `full`
-
-## 13. Lệnh tiện ích
-
-Kiểm tra reactor Maven:
+Kiểm tra health của các service:
 
 ```powershell
-mvn -q validate
+curl http://localhost:8081/actuator/health
+curl http://localhost:8082/actuator/health
+curl http://localhost:8083/actuator/health
+curl http://localhost:8084/actuator/health
+curl http://localhost:8085/actuator/health
+curl http://localhost:8086/actuator/health
 ```
 
-Dừng service trên Linux:
+Chạy smoke test cho auth + transfer + idempotency:
 
-```bash
-./scripts/stop-services.sh
+```powershell
+.\scripts\smoke-auth-transfer.ps1
 ```
+
+## API chính
+
+| API | Truy cập qua | Mục đích |
+| --- | --- | --- |
+| `POST /api/auth/register` | Kong `:8000` | Tạo người dùng mới |
+| `POST /api/auth/login` | Kong `:8000` | Đăng nhập và lấy JWT |
+| `POST /api/transfers` | Kong `:8000` | Tạo lệnh chuyển tiền, yêu cầu `Authorization` và `Idempotency-Key` |
+| `POST /accounts` | Account service `:8082` hoặc frontend `/api/accounts` | Tạo tài khoản |
+| `GET /accounts/{accountNumber}` | Account service `:8082` hoặc frontend `/api/accounts/{accountNumber}` | Xem thông tin tài khoản |
+| `GET /accounts/by-owner/{ownerName}` | Account service `:8082` hoặc frontend `/api/accounts/by-owner/{ownerName}` | Tìm tài khoản theo chủ sở hữu |
+| `GET /notifications/account/{accountNumber}` | Notification service `:8085` hoặc frontend `/api/notifications/account/{accountNumber}` | Lấy danh sách thông báo |
+
+## Đặc điểm kỹ thuật nổi bật
+
+- `transaction-service` dùng `Idempotency-Key` để tránh tạo trùng giao dịch khi client retry.
+- Nếu debit thành công nhưng credit thất bại, hệ thống gọi compensate để hoàn tiền cho tài khoản nguồn.
+- `notification-service` và `audit-service` tiêu thụ sự kiện từ Kafka theo kiểu bất đồng bộ.
+- Mỗi service đều xuất `health`, `metrics` và trace data để phục vụ giám sát.
+- Frontend tự tạo tài khoản thanh toán cho user mới nếu chưa có account mapping.
+
+## Tài liệu dự án
+
+- [Phân tích nghiệp vụ theo SOA](docs/analysis-and-design.md)
+- [Tài liệu kiến trúc](docs/architecture.md)
+- [Đặc tả API](docs/api-specs/)
+
+## OpenAPI
+
+- [auth-service](docs/api-specs/auth-service.yaml)
+- [account-service](docs/api-specs/account-service.yaml)
+- [fraud-detection-service](docs/api-specs/fraud-detection-service.yaml)
+- [transaction-service](docs/api-specs/transaction-service.yaml)
+- [notification-service](docs/api-specs/notification-service.yaml)
+- [audit-service](docs/api-specs/audit-service.yaml)

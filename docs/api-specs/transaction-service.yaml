@@ -1,10 +1,10 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: Transaction Service API
   version: 1.0.0
-  description: API cho luồng chuyển tiền, tra cứu giao dịch và observability endpoint của transaction-service.
+  description: API cho luồng chuyển tiền và observability endpoint của transaction-service.
 servers:
-  - url: /api
+  - url: /
 paths:
   /transfers:
     post:
@@ -39,25 +39,7 @@ paths:
           description: JWT không hợp lệ
         '409':
           description: Xung đột nghiệp vụ
-  /transfers/{transferId}:
-    get:
-      summary: Tra cứu trạng thái giao dịch
-      parameters:
-        - in: path
-          name: transferId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransferResponse'
-        '404':
-          description: Không tìm thấy giao dịch
+  
   /actuator/health:
     get:
       summary: Health check
