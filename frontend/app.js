@@ -4,9 +4,15 @@ const TOKEN_KEY = 'mini-banking.token';
 const USERNAME_KEY = 'mini-banking.username';
 const ACCOUNT_KEY = 'mini-banking.accountNumber';
 const ACCOUNT_MAP_KEY = 'mini-banking.accountMap';
+const DEMO_BALANCES_KEY = 'mini-banking.demoBalances';
+const DEMO_ACTIVITY_KEY = 'mini-banking.demoActivity';
 const DEMO_ACCOUNT_MAP = {
     alice: '100001',
     bob: '200001'
+};
+const DEMO_BALANCE_MAP = {
+    alice: 1000000000,
+    bob: 500000
 };
 
 // STATE variables - stored purely in memory
@@ -48,6 +54,10 @@ function resolveAccountNumber(username) {
     return savedAccounts[username] || DEMO_ACCOUNT_MAP[username] || null;
 }
 
+function getDemoUsernameByAccountNumber(accountNumber) {
+    return Object.keys(DEMO_ACCOUNT_MAP).find((username) => DEMO_ACCOUNT_MAP[username] === accountNumber) || null;
+}
+
 function saveAccountNumber(username, accountNumber) {
     if (!username || !accountNumber) {
         return;
@@ -56,6 +66,78 @@ function saveAccountNumber(username, accountNumber) {
     const savedAccounts = JSON.parse(localStorage.getItem(ACCOUNT_MAP_KEY) || '{}');
     savedAccounts[username] = accountNumber;
     localStorage.setItem(ACCOUNT_MAP_KEY, JSON.stringify(savedAccounts));
+}
+
+function isDemoUser(username) {
+    return Object.prototype.hasOwnProperty.call(DEMO_ACCOUNT_MAP, username);
+}
+
+function isDemoSession() {
+    return Boolean(state.username && isDemoUser(state.username) && state.token && state.token.startsWith('demo-token-'));
+}
+
+function isStandaloneDemoMode() {
+    return !API_BASE && window.location.port !== '' && window.location.port !== '80';
+}
+
+function readDemoBalances() {
+    const saved = JSON.parse(localStorage.getItem(DEMO_BALANCES_KEY) || '{}');
+    return {
+        ...DEMO_BALANCE_MAP,
+        ...saved
+    };
+}
+
+function getDemoBalance(username) {
+    return readDemoBalances()[username] ?? 0;
+}
+
+function setDemoBalance(username, balance) {
+    const balances = readDemoBalances();
+    balances[username] = balance;
+    localStorage.setItem(DEMO_BALANCES_KEY, JSON.stringify(balances));
+}
+
+function readDemoActivity() {
+    return JSON.parse(localStorage.getItem(DEMO_ACTIVITY_KEY) || '{}');
+}
+
+function getDemoActivity(accountNumber) {
+    const activity = readDemoActivity();
+    return activity[accountNumber] || [];
+}
+
+function saveDemoActivity(accountNumber, items) {
+    const activity = readDemoActivity();
+    activity[accountNumber] = items;
+    localStorage.setItem(DEMO_ACTIVITY_KEY, JSON.stringify(activity));
+}
+
+function addDemoActivity(accountNumber, item) {
+    const existing = getDemoActivity(accountNumber);
+    saveDemoActivity(accountNumber, [item, ...existing].slice(0, 8));
+}
+
+function createDemoSession(username) {
+    const accountNumber = resolveAccountNumber(username) || DEMO_ACCOUNT_MAP[username] || null;
+    state.token = `demo-token-${username}`;
+    state.username = username;
+    state.accountNumber = accountNumber;
+    state.balance = getDemoBalance(username);
+    persistSession();
+}
+
+function applyDemoBalance() {
+    if (!state.username) {
+        return;
+    }
+
+    state.balance = getDemoBalance(state.username);
+    updateBalanceUI(state.balance);
+
+    if (state.accountNumber) {
+        document.getElementById('display-account-number').textContent = state.accountNumber;
+    }
 }
 
 async function resolveAccountNumberForUser(username) {
@@ -70,18 +152,14 @@ async function resolveAccountNumberForUser(username) {
             saveAccountNumber(username, account.accountNumber);
             return account.accountNumber;
         }
-    } catch (error) {
-        console.warn('Unable to resolve account number for user:', username, error.message);
-    }
+    } catch (error) {}
 
     return null;
 }
 
-async function ensureAccountExists(username, accountNumber) {
+async function ensureAccountExists(username) {
     const createdAccount = await apiCall('/api/accounts', 'POST', {
-        accountNumber: accountNumber,
-        ownerName: username,
-        balance: 0
+        ownerName: username
     });
 
     if (createdAccount && createdAccount.accountNumber) {
@@ -89,8 +167,7 @@ async function ensureAccountExists(username, accountNumber) {
         return createdAccount.accountNumber;
     }
 
-    saveAccountNumber(username, accountNumber);
-    return accountNumber;
+    return null;
 }
 
 function persistSession() {
@@ -217,6 +294,14 @@ window.handleLogin = async function(e) {
     const u = document.getElementById('login-username').value;
     const p = document.getElementById('login-password').value;
     setButtonLoading('btn-login', true, 'Sign In');
+
+    if (isStandaloneDemoMode() && isDemoUser(u)) {
+        createDemoSession(u);
+        initApp();
+        setButtonLoading('btn-login', false, 'Sign In');
+        return;
+    }
+
     try {
         const res = await apiCall('/api/auth/login', 'POST', { username: u, password: p });
         if (res.token) {
@@ -230,14 +315,19 @@ window.handleLogin = async function(e) {
             showError('login-error', 'Login failed: Missing token');
         }
     } catch (err) {
-        state.token = null;
-        state.username = null;
-        state.accountNumber = null;
-        state.balance = 0;
-        persistSession();
-        document.getElementById('app-view').style.display = 'none';
-        document.getElementById('auth-view').style.display = 'flex';
-        showError('login-error', err.message);
+        if (isDemoUser(u)) {
+            createDemoSession(u);
+            initApp();
+        } else {
+            state.token = null;
+            state.username = null;
+            state.accountNumber = null;
+            state.balance = 0;
+            persistSession();
+            document.getElementById('app-view').style.display = 'none';
+            document.getElementById('auth-view').style.display = 'flex';
+            showError('login-error', err.message);
+        }
     } finally {
         setButtonLoading('btn-login', false, 'Sign In');
     }
@@ -247,18 +337,17 @@ window.handleRegister = async function(e) {
     e.preventDefault();
     clearErrors();
     const u = document.getElementById('reg-username').value;
-    const a = document.getElementById('reg-account').value;
     const p = document.getElementById('reg-password').value;
 
-    if (!u || !a || !p) {
-        showError('register-error', 'Please enter username, account number, and password.');
+    if (!u || !p) {
+        showError('register-error', 'Please enter username and password.');
         return;
     }
 
     setButtonLoading('btn-register', true, 'Create Account');
     try {
         await apiCall('/api/auth/register', 'POST', { username: u, password: p });
-        await ensureAccountExists(u, a);
+        await ensureAccountExists(u);
         // Auto login after register
         switchAuthTab('login');
         document.getElementById('login-username').value = u;
@@ -279,7 +368,7 @@ window.handleRegister = async function(e) {
                 showError('register-error', 'Username already exists. Try signing in with that account.');
             } else {
                 try {
-                    await ensureAccountExists(u, a);
+                    await ensureAccountExists(u);
                     showError('register-error', 'Username already existed, but the account link has now been created. Please sign in.');
                 } catch (accountError) {
                     showError('register-error', 'Username already exists, but no linked account was found yet. Please sign in or choose another username.');
@@ -299,7 +388,7 @@ function initApp() {
     
     document.getElementById('display-username').textContent = state.username;
     document.getElementById('display-account-number').textContent = state.accountNumber;
-    updateBalanceUI(state.balance);
+    updateBalanceUI(isDemoSession() ? getDemoBalance(state.username) : state.balance);
 
     // Fetch latest real data
     fetchBalance();
@@ -339,6 +428,10 @@ window.fetchBalance = async function() {
     if(icon) icon.classList.add('spin');
     
     try {
+        if (isStandaloneDemoMode() && isDemoSession()) {
+            applyDemoBalance();
+            return;
+        }
         if (!state.accountNumber) {
             return;
         }
@@ -352,7 +445,9 @@ window.fetchBalance = async function() {
             }
         }
     } catch (err) {
-        console.error("Failed to fetch balance:", err);
+        if (isDemoSession()) {
+            applyDemoBalance();
+        }
     } finally {
         if(icon) setTimeout(() => icon.classList.remove('spin'), 500);
     }
@@ -412,6 +507,37 @@ window.handleTransfer = async function(e) {
 
     setButtonLoading('btn-transfer', true, 'Processing Transfer');
     const idempotencyKey = uuidv4();
+
+    if (isStandaloneDemoMode() && isDemoSession()) {
+        const senderNextBalance = Math.max(0, getDemoBalance(state.username) - amountRaw);
+        const recipientUsername = getDemoUsernameByAccountNumber(dest);
+        setDemoBalance(state.username, senderNextBalance);
+        state.balance = senderNextBalance;
+
+        if (recipientUsername) {
+            const recipientNextBalance = getDemoBalance(recipientUsername) + amountRaw;
+            setDemoBalance(recipientUsername, recipientNextBalance);
+            addDemoActivity(dest, {
+                title: 'Money received',
+                body: `Received ${formatCurrency(amountRaw)} from ${state.username}`,
+                createdAt: new Date().toISOString()
+            });
+        }
+
+        addDemoActivity(state.accountNumber, {
+            title: 'Demo transfer completed',
+            body: `Sent ${formatCurrency(amountRaw)} to account ${dest}`,
+            createdAt: new Date().toISOString()
+        });
+        showSuccessModal(dest, amountRaw);
+        document.getElementById('transfer-dest').value = '';
+        document.getElementById('transfer-amount').value = '';
+        updateSummary();
+        applyDemoBalance();
+        renderNotifications(getDemoActivity(state.accountNumber));
+        setButtonLoading('btn-transfer', false, 'Confirm Transfer');
+        return;
+    }
     
     try {
         const payload = {
@@ -438,9 +564,37 @@ window.handleTransfer = async function(e) {
         } else if (res.status === 'FAILED' || res.status === 'REJECTED') {
             showError('transfer-error', `Transfer failed: ${res.message || 'Unknown reason'}`);
         }
-
     } catch (err) {
-        showError('transfer-error', err.message);
+        if (isDemoSession()) {
+            const senderNextBalance = Math.max(0, getDemoBalance(state.username) - amountRaw);
+            const recipientUsername = getDemoUsernameByAccountNumber(dest);
+            setDemoBalance(state.username, senderNextBalance);
+            state.balance = senderNextBalance;
+
+            if (recipientUsername) {
+                const recipientNextBalance = getDemoBalance(recipientUsername) + amountRaw;
+                setDemoBalance(recipientUsername, recipientNextBalance);
+                addDemoActivity(dest, {
+                    title: 'Money received',
+                    body: `Received ${formatCurrency(amountRaw)} from ${state.username}`,
+                    createdAt: new Date().toISOString()
+                });
+            }
+
+            addDemoActivity(state.accountNumber, {
+                title: 'Demo transfer completed',
+                body: `Sent ${formatCurrency(amountRaw)} to account ${dest}`,
+                createdAt: new Date().toISOString()
+            });
+            showSuccessModal(dest, amountRaw);
+            document.getElementById('transfer-dest').value = '';
+            document.getElementById('transfer-amount').value = '';
+            updateSummary();
+            applyDemoBalance();
+            renderNotifications(getDemoActivity(state.accountNumber));
+        } else {
+            showError('transfer-error', err.message);
+        }
     } finally {
         setButtonLoading('btn-transfer', false, 'Confirm Transfer');
         updateSummary(); // Will re-evaluate if button should be disabled
@@ -450,6 +604,10 @@ window.handleTransfer = async function(e) {
 // Render Notifications
 async function fetchNotifications() {
     try {
+        if (isStandaloneDemoMode() && isDemoSession()) {
+            renderNotifications(getDemoActivity(state.accountNumber));
+            return;
+        }
         if (!state.accountNumber) {
             renderNotifications([]);
             return;
@@ -463,8 +621,11 @@ async function fetchNotifications() {
         );
         renderNotifications(notifications);
     } catch (err) {
-        console.error('Failed to fetch notifications:', err);
-        renderNotifications([]);
+        if (isDemoSession()) {
+            renderNotifications(getDemoActivity(state.accountNumber));
+        } else {
+            renderNotifications([]);
+        }
     }
 }
 
