@@ -4,10 +4,7 @@ Hệ thống mô phỏng chuyển tiền nội bộ cho ngân hàng số theo ki
 
 > `README.md` này mô tả hiện trạng thực tế của repo. Hạ tầng chạy bằng Docker Compose trong `infra/`, còn các Spring Boot service được chạy local bằng Maven.
 
-## Thành viên nhóm
-
-> Cập nhật lại bảng này theo thông tin nhóm của bạn trước khi nộp bài.
-
+Tài khoản demo:  alice - secret123 | bob - secret123
 ## Phạm vi nghiệp vụ
 
 - Đăng ký và đăng nhập người dùng bằng JWT.
