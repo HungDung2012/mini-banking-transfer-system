@@ -38,6 +38,9 @@ graph LR
     AUD --> PG
 ```
 
+## Database
+<img width="975" height="574" alt="image" src="https://github.com/user-attachments/assets/03bb908e-831c-4ccd-8f37-5cd3745cb0c1" />
+
 ## Thành phần chính
 
 | Thành phần | Cổng | Vai trò |
