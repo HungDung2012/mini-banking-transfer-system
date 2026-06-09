@@ -39,7 +39,8 @@ graph LR
 ```
 
 ## Database
-<img width="975" height="574" alt="image" src="https://github.com/user-attachments/assets/03bb908e-831c-4ccd-8f37-5cd3745cb0c1" />
+<img width="943" height="555" alt="image" src="https://github.com/user-attachments/assets/ffb3ec3a-3d07-406e-bc40-abed5ec04928" />
+
 
 ## Thành phần chính
 
